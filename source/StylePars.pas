@@ -312,7 +312,6 @@ var
 begin
   Top := EofChar;
   Strings := 0;
-  ImportantSepPos := 0;
   InString := False;
   GetCh;
   repeat
@@ -325,6 +324,7 @@ begin
         GetCh(True);
         SkipWhiteSpace(True);
 
+        ImportantSepPos := 0;
         SetLength(Value, 0);
         { The ';' inside a quotation should not end a CSS value.  }
         while not ((LCh = ';') and (Top = EofChar)) and (GetTermCharKind(LCh, GoodTermChars, BadTermChars) = tckNone) do
@@ -1857,6 +1857,11 @@ begin
               GetCh;
             LCh := ' ';
           end;
+
+        '[', ']':
+            // not yet supported.
+            // skip and ignore style.
+            Ignore := True;
       else
         break;
       end;

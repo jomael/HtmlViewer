@@ -304,7 +304,7 @@ type
     function PtInDrawRect(X, Y: Integer; var IX, IY: Integer): Boolean; virtual;
     procedure AddSectionsToList; virtual;
     procedure CopySelectedText; virtual;
-    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); virtual;
+    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); virtual;
   end;
 
   TSectionBaseList = class(TObjectList)
@@ -446,7 +446,7 @@ type
 {$ifdef UseFormTree}
     procedure FormTree(const Indent: ThtString; var Tree: ThtString);
 {$endif UseFormTree}
-    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); virtual;
+    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); virtual;
     property Document: ThtDocument read FDocument; {the ThtDocument that holds the whole document}
     property OwnerBlock: TBlock read FOwnerBlock;
   end;
@@ -792,7 +792,7 @@ type
     procedure CopySelectedText; override;
     procedure Finish;
     procedure HRef(IsHRef: Boolean; List: ThtDocument; AnURL: TUrlTarget; Attributes: TAttributeList; Prop: TProperties);
-    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); override;
+    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); override;
     procedure ProcessText(TagIndex: Integer); virtual;
   end;
 
@@ -828,7 +828,7 @@ type
     function GetBorderWidth: Integer; virtual;
     function CalcDisplayExtern: ThtDisplayStyle; override;
     function CalcDisplayIntern: ThtDisplayStyle; override;
-    procedure ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); virtual;
+    procedure ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); virtual;
     procedure ConvMargArray(BaseWidth, BaseHeight: Integer; out AutoCount: Integer); virtual;
     procedure DrawBlockBorder(Canvas: TCanvas; const ORect, IRect: TRect); virtual;
     property BorderWidth: Integer read GetBorderWidth;
@@ -848,6 +848,7 @@ type
 
     PRec: PtPositionRec; // background image position
     Visibility: ThtVisibilityStyle;
+    TopAuto: Boolean;
     BottomAuto: Boolean;
     BreakBefore, BreakAfter, KeepIntact: Boolean;
     HideOverflow: Boolean;
@@ -892,7 +893,7 @@ type
 {$ifdef UseFormTree}
     procedure FormTree(const Indent: ThtString; var Tree: ThtString);
 {$endif UseFormTree}
-    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); override;
+    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); override;
   end;
 
 //------------------------------------------------------------------------------
@@ -1117,7 +1118,7 @@ type
     FLegend: TBlockCell;
   protected
     procedure ConvMargArray(BaseWidth, BaseHeight: Integer; out AutoCount: Integer); override;
-    procedure ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); override;
+    procedure ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); override;
   public
     constructor Create(Parent: TCellBasic; Attributes: TAttributeList; Prop: TProperties);
     constructor CreateCopy(Parent: TCellBasic; Source: THtmlNode); override;
@@ -1360,9 +1361,9 @@ type
     constructor CreateCopy(OwnerCell: TCellBasic; Source: THtmlNode); override;
     function DrawLogic1(Canvas: TCanvas; X, Y, XRef, YRef, AWidth, AHeight, BlHt: Integer; IMgr: TIndentManager; var MaxWidth, Curs: Integer): Integer; override;
     function Draw1(Canvas: TCanvas; const ARect: TRect; IMgr: TIndentManager; X, XRef, YRef: Integer): Integer; override;
-    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); override;
+    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); override;
     function FindWidth(Canvas: TCanvas; AWidth, AHeight, AutoCount: Integer): Integer; override;
-    function FindWidth1(Canvas: TCanvas; AWidth, ExtMarg: Integer): Integer;
+    function FindWidth1(Canvas: TCanvas; AWidth, AHeight, ExtMarg: Integer): Integer;
     procedure AddSectionsToList; override;
   end;
 
@@ -1379,7 +1380,7 @@ type
     constructor CreateCopy(OwnerCell: TCellBasic; Source: THtmlNode); override;
     procedure CancelUsage;
     function FindWidth(Canvas: TCanvas; AWidth, AHeight, AutoCount: Integer): Integer; override;
-    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); override;
+    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); override;
     function FindDocPos(SourcePos: Integer; Prev: Boolean): Integer; override;
     property CaptionBlock: TBlock read FCaptionBlock write SetCaptionBlock;
   end;
@@ -1428,7 +1429,7 @@ type
     procedure IncreaseWidthsRelatively(var Widths: TIntArray; StartIndex, EndIndex, Required, SpannedMultis: Integer; ExactRelation: Boolean);
     procedure IncreaseWidthsEvenly(WidthType: TWidthType; var Widths: TIntArray; StartIndex, EndIndex, Required, Spanned, Count: Integer);
     procedure Initialize; // add dummy cells, initialize cells, prepare arrays
-    procedure GetMinMaxWidths(Canvas: TCanvas);
+    procedure GetMinMaxWidths(Canvas: TCanvas; AvailableWidth, AvailableHeight: Integer);
   public
     Rows: TRowList;        {a list of TCellLists}
     Rules: TTableRules;
@@ -1439,7 +1440,7 @@ type
     constructor CreateCopy(OwnerCell: TCellBasic; Source: THtmlNode); override;
     destructor Destroy; override;
     procedure DoColumns(Count: Integer; const SpecWidth: TSpecWidth; VAlign: ThtAlignmentStyle; const Align: ThtString);
-    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer); override;
+    procedure MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer); override;
     function DrawLogic1(Canvas: TCanvas; X, Y, XRef, YRef, AWidth, AHeight, BlHt: Integer; IMgr: TIndentManager; var MaxWidth, Curs: Integer): Integer; override;
     function Draw1(Canvas: TCanvas; const ARect: TRect; IMgr: TIndentManager; X, XRef, YRef: Integer): Integer; override;
     function GetURL(Canvas: TCanvas; X, Y: Integer; out UrlTarg: TUrlTarget; out FormControl: TIDObject {TImageFormControlObj}; out ATitle: ThtString): ThtguResultType; override;
@@ -3045,7 +3046,7 @@ begin
 
   if not ViewImages or SubstImage then
   begin
-    if not SubstImage and ((SpecWidth >= 0) or (SpecHeight >= 0)) then
+    if ClientSizeKnown or (not SubstImage and ((SpecWidth >= 0) or (SpecHeight >= 0))) then
     begin {size to whatever is specified}
       AltWidth := ObjWidth;
       AltHeight := ObjHeight;
@@ -4320,31 +4321,54 @@ function TCellBasic.CheckLastBottomMargin: Boolean;
  set it to 0}
 var
   TB: TSectionBase;
-  I: Integer;
-  Done: Boolean;
+  Block: TBlock absolute TB;
+  I, J: Integer;
 begin
   Result := False;
-  I := Count - 1; {find the preceding block that isn't absolute positioning}
-  Done := False;
-  while (I >= 0) and not Done do
+
+  I := 0; {find first block that isn't absolute positioning}
+  while I < Count do
   begin
     TB := Items[I];
-    if (TB is TBlock) and (TBlock(TB).Positioning <> PosAbsolute) then
-      Done := True
-    else
-      Dec(I);
+    if TB is TSection and (Length(Trim(TSection(TB).BuffS)) = 0) then
+    else if not (TB is TBlock) or (TBlock(TB).Positioning <> PosAbsolute) then
+        break;
+
+    Inc(I);
   end;
-  if I >= 0 then
+  if I < Count then
   begin
-    TB := Items[I];
     if TB is TBlock then
     begin
-      with TBlock(TB) do
-        if BottomAuto then
-        begin
-          MargArray[MarginBottom] := 0;
-          Result := True;
-        end;
+      if Block.TopAuto then
+      begin
+        Block.MargArray[MarginTop] := 0;
+//        Result := True;
+      end;
+//      if TB is TBlockLI then
+//        Result := TBlockLI(TB).MyCell.CheckLastBottomMargin;
+    end
+  end;
+
+  J := Count - 1; {find the preceding block that isn't absolute positioning}
+  while J >= I do
+  begin
+    TB := Items[J];
+    if TB is TSection and (Length(Trim(TSection(TB).BuffS)) = 0) then
+    else if not (TB is TBlock) or (TBlock(TB).Positioning <> PosAbsolute) then
+      break;
+
+    Dec(J);
+  end;
+  if J >= 0 then
+  begin
+    if TB is TBlock then
+    begin
+      if Block.BottomAuto then
+      begin
+        Block.MargArray[MarginBottom] := 0;
+        Result := True;
+      end;
       if TB is TBlockLI then
         Result := TBlockLI(TB).MyCell.CheckLastBottomMargin;
     end;
@@ -4614,7 +4638,7 @@ end;
 
 {----------------TCellBasic.MinMaxWidth}
 
-procedure TCellBasic.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TCellBasic.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 {Find the Width the cell would take if no wordwrap, Max, and the width if wrapped
  at largest word, Min}
 var
@@ -4627,7 +4651,7 @@ begin
   Max := 0; Min := 0;
   for I := 0 to Count - 1 do
   begin
-    Items[I].MinMaxWidth(Canvas, Mn, Mx);
+    Items[I].MinMaxWidth(Canvas, Mn, Mx, AvailableWidth, AvailableHeight);
     Max := Math.Max(Max, Mx);
     Min := Math.Max(Min, Mn);
   end;
@@ -4732,7 +4756,6 @@ end;
 procedure TBlock.CollapseAdjoiningMargins;
 {adjacent vertical margins need to be reduced}
 var
-  TopAuto: Boolean;
   TB: TSectionBase;
   Block: TBlock absolute TB;
   LastMargin, I: Integer;
@@ -4869,14 +4892,14 @@ begin
 end;
 
 //-- BG ---------------------------------------------------------- 09.10.2010 --
-procedure TBlock.ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TBlock.ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 begin
 {$IFDEF JPM_DEBUGGING}
   CodeSite.EnterMethod(Self, Format('TBlock.ContentMinMaxWidth TagClass = [%s]', [TagClass]));
   try
 {$ENDIF}
 
-  MyCell.MinMaxWidth(Canvas, Min, Max);
+  MyCell.MinMaxWidth(Canvas, Min, Max, AvailableWidth, AvailableHeight);
 
 {$IFDEF JPM_DEBUGGING}
   finally
@@ -4936,7 +4959,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TBlock.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TBlock.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 var
   MinCell, MaxCell: Integer;
   LeftSide, RightSide, AutoCount: Integer;
@@ -4956,12 +4979,12 @@ begin
 {$ifdef DO_BLOCK_INLINE}
   if Display = pdInline then
   begin
-    inherited MinMaxWidth(Canvas,Min,Max);
+    inherited MinMaxWidth(Canvas, Min, Max, AvailableWidth, AvailableHeight);
     exit;
   end;
 {$endif}
 
-  ConvMargArray(0, 400, AutoCount);
+  ConvMargArray(AvailableWidth, AvailableHeight, AutoCount);
   //HideOverflow := HideOverflow and (MargArray[piWidth] <> Auto) and (MargArray[piWidth] > 20);
   if HideOverflow and (MargArray[piWidth] <> Auto) and (MargArray[piWidth] > 20) then
   begin
@@ -4969,7 +4992,7 @@ begin
     MaxCell := MinCell;
   end
   else
-    ContentMinMaxWidth(Canvas, MinCell, MaxCell);
+    ContentMinMaxWidth(Canvas, MinCell, MaxCell, AvailableWidth, AvailableHeight);
   if MargArray[MarginLeft] = Auto then
     MargArray[MarginLeft] := 0;
   if MargArray[MarginRight] = Auto then
@@ -5254,7 +5277,7 @@ begin
   CodeSite.AddSeparator;
 {$ENDIF}
 
-  ContentMinMaxWidth(Canvas, MinWidth, MaxWidth);
+  ContentMinMaxWidth(Canvas, MinWidth, MaxWidth, AWidth, AHeight);
   //HideOverflow := HideOverflow and (MargArray[piWidth] <> Auto) and (MargArray[piWidth] > 20);
   case AutoCount of
     0:
@@ -5343,11 +5366,16 @@ var
   var
     H: Integer;
   begin
-    H := MargArray[piHeight];
-    if not VarIsIntNull(MargArrayO[piHeight]) then
+    if VarIsIntNull(MargArrayO[piHeight]) then
+      Result := Max(ContentTop, ClientContentBot)
+    else
+    begin
       if Pos('%', VarToStr(MargArrayO[piHeight])) > 0 then
-        H := LengthConv(MargArrayO[piHeight], False, ContainingBox.Bottom - ContainingBox.Top, EmSize, ExSize, 0);
-    Result := Max(H, Max(ContentTop, ClientContentBot));
+        H := LengthConv(MargArrayO[piHeight], False, AHeight, EmSize, ExSize, 0)
+      else
+        H := MargArray[piHeight];
+      Result := Max(H + ContentTop, ContentTop);
+    end;
   end;
 
   procedure DrawLogicAsBlock;
@@ -6186,8 +6214,8 @@ begin
   TableBlock.FFloating := ANone;
   TableBlock.Table.Float := False;
 
-  CaptionBlock.MinMaxWidth(Canvas, Mn, Mx);
-  FWidth := TableBlock.FindWidth1(Canvas, AWidth, MargArray[MarginLeft] + MargArray[MarginRight]);
+  CaptionBlock.MinMaxWidth(Canvas, Mn, Mx, AWidth, AHeight);
+  FWidth := TableBlock.FindWidth1(Canvas, AWidth, AHeight, MargArray[MarginLeft] + MargArray[MarginRight]);
   Result := Max(FWidth, Mn);
   if (Result < AWidth) and (MargArray[MarginLeft] = 0) and (MargArray[MarginRight] = 0) then
     case Justify of
@@ -6205,7 +6233,7 @@ end;
 
 {----------------TTableAndCaptionBlock.MinMaxWidth}
 
-procedure TTableAndCaptionBlock.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TTableAndCaptionBlock.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 var
   Mx, Mn, MxTable, MnTable: Integer;
 begin
@@ -6213,8 +6241,8 @@ begin
   CodeSite.EnterMethod(Self, Format('TTableAndCaptionBlock.MinMaxWidth TagClass = [%s]', [TagClass]));
   try
 {$ENDIF}
-  TableBlock.MinMaxWidth(Canvas, MnTable, MxTable);
-  FCaptionBlock.MinMaxWidth(Canvas, Mn, Mx);
+  TableBlock.MinMaxWidth(Canvas, MnTable, MxTable, AvailableWidth, AvailableHeight);
+  FCaptionBlock.MinMaxWidth(Canvas, Mn, Mx, AvailableWidth, AvailableHeight);
   Min := Math.Max(MnTable, Mn);
   Max := Math.Max(MxTable, Mn);
 {$IFDEF JPM_DEBUGGING}
@@ -6355,7 +6383,7 @@ begin
           BkGnd := TryStrToColor(Name, False, BkColor);
 
         BackgroundSy:
-          if not Assigned(BGImage) then
+          if not Assigned(BGImage) and (Length(Name) > 0) then
           begin
             BGImage := TImageObj.SimpleCreate(MyCell, Name);
             PRec.X.PosType := bpDim;
@@ -6434,7 +6462,7 @@ end;
 
 {----------------TTableBlock.MinMaxWidth}
 
-procedure TTableBlock.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TTableBlock.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 var
   TmpWidth: Integer;
 begin
@@ -6448,7 +6476,7 @@ begin
     TmpWidth := Math.Max(0, WidthAttr - MargArray[BorderLeftWidth] - MargArray[BorderRightWidth]
       - MargArray[PaddingLeft] - MargArray[PaddingRight]);
   Table.tblWidthAttr := TmpWidth;
-  inherited MinMaxWidth(Canvas, Min, Max);
+  inherited MinMaxWidth(Canvas, Min, Max, AvailableWidth, AvailableHeight);
   if TmpWidth > 0 then
   begin
     Min := Math.Max(Min, TmpWidth);
@@ -6463,7 +6491,7 @@ end;
 
 {----------------TTableBlock.FindWidth1}
 
-function TTableBlock.FindWidth1(Canvas: TCanvas; AWidth, ExtMarg: Integer): Integer;
+function TTableBlock.FindWidth1(Canvas: TCanvas; AWidth, AHeight, ExtMarg: Integer): Integer;
 {called by TTableAndCaptionBlock to assist in it's FindWidth Calculation.
  This method is called before TTableBlockFindWidth but is called only if there
  is a caption on the table.  AWidth is the full width available to the
@@ -6489,13 +6517,13 @@ begin
       Result := WidthAttr;
     Result := Result - PaddingAndBorder;
     Table.tblWidthAttr := Result;
-    Table.MinMaxWidth(Canvas, Min, Max);
+    Table.MinMaxWidth(Canvas, Min, Max, AWidth, AHeight);
     Result := Math.Max(Min, Result);
     Table.tblWidthAttr := Result;
   end
   else
   begin
-    Table.MinMaxWidth(Canvas, Min, Max);
+    Table.MinMaxWidth(Canvas, Min, Max, AWidth, AHeight);
     Allow := AWidth - PaddingAndBorder;
     if Max <= Allow then
       Result := Max
@@ -6567,7 +6595,7 @@ begin
       else
         Result := WidthAttr - (MargArray[PaddingLeft] + MargArray[BorderLeftWidth] + MargArray[PaddingRight] + MargArray[BorderRightWidth]);
       Table.tblWidthAttr := Result;
-      Table.MinMaxWidth(Canvas, Min, Max);
+      Table.MinMaxWidth(Canvas, Min, Max, AWidth, AHeight);
       Table.tblWidthAttr := Math.Max(Min, Math.Min(Max, Result));
     end;
     Result := Table.tblWidthAttr;
@@ -6575,7 +6603,7 @@ begin
   else
   begin
     Result := AWidth - LeftSide - RightSide;
-    Table.MinMaxWidth(Canvas, Min, Max);
+    Table.MinMaxWidth(Canvas, Min, Max, AWidth, AHeight);
     P := Math.Min(Sum(Table.Percents), 1000);
     if P > 0 then
     begin
@@ -9522,7 +9550,7 @@ end;
 
 {----------------THtmlTable.GetWidths}
 
-procedure THtmlTable.GetMinMaxWidths(Canvas: TCanvas);
+procedure THtmlTable.GetMinMaxWidths(Canvas: TCanvas; AvailableWidth, AvailableHeight: Integer);
 // calculate MaxWidths and MinWidths of all columns.
 
   procedure UpdateColumnSpec(var Counts: TIntegerPerWidthType; var OldType: TWidthType; NewType: TWidthType);
@@ -9703,7 +9731,7 @@ begin
         if CellObj.ColSpan = Span then
         begin
           // get min and max width of this cell:
-          CellObj.Cell.MinMaxWidth(Canvas, CellMin, CellMax);
+          CellObj.Cell.MinMaxWidth(Canvas, CellMin, CellMax, 0, 0);
           CellPercent := 0;
           CellRel := 0;
           with CellObj.SpecWd do
@@ -9879,10 +9907,10 @@ end;
 
 {----------------THtmlTable.MinMaxWidth}
 
-procedure THtmlTable.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure THtmlTable.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 begin
   Initialize; {in case it hasn't been done}
-  GetMinMaxWidths(Canvas);
+  GetMinMaxWidths(Canvas, AvailableWidth, AvailableHeight);
   Min := Math.Max(Sum(MinWidths) + CellSpacingHorz, tblWidthAttr);
   Max := Math.Max(Sum(MaxWidths) + CellSpacingHorz, tblWidthAttr);
 
@@ -9987,7 +10015,7 @@ function THtmlTable.DrawLogic1(Canvas: TCanvas; X, Y, XRef, YRef, AWidth, AHeigh
     Initialize;
 
     {Figure the width of each column}
-    GetMinMaxWidths(Canvas);
+    GetMinMaxWidths(Canvas, AWidth, AHeight);
 
     MinWidth := Sum(MinWidths);
     if FOwnerTableBlock.MargArray[piMinWidth] > 0 then
@@ -11744,11 +11772,19 @@ begin
 end;
 
 //-- BG ---------------------------------------------------------- 27.01.2012 --
-function CanWrapAfter(C: WideChar): Boolean;
+function CanWrapAfter(PC: PWideChar): Boolean;
  {$ifdef UseInline} inline; {$endif}
 begin
-  case C of
-    WideChar('-'), WideChar('/'), WideChar('?'):
+  case PC^ of
+    WideChar('-'):
+      case (PC+1)^ of
+        WideChar('0')..WideChar('9'):
+          Result := False;
+      else
+        Result := True;
+      end;
+
+    WideChar('/'), WideChar('?'):
       Result := True
   else
     Result := False;
@@ -11756,20 +11792,28 @@ begin
 end;
 
 //-- BG ---------------------------------------------------------- 20.09.2010 --
-function CanWrap(C: WideChar): Boolean;
+function CanWrap(PC: PWideChar): Boolean;
  {$ifdef UseInline} inline; {$endif}
 begin
-  case C of
-    WideChar(' '), WideChar('-'), WideChar('/'), WideChar('?'), ImgPan, FmCtl, BrkCh:
+  case PC^ of
+    WideChar('-'):
+      case (PC+1)^ of
+        WideChar('0')..WideChar('9'):
+          Result := False;
+      else
+        Result := True;
+      end;
+
+    WideChar(' '), WideChar('/'), WideChar('?'), ImgPan, FmCtl, BrkCh:
       Result := True
   else
-    Result := WrapChar(C);
+    Result := WrapChar(PC^);
   end;
 end;
 
 {----------------TSection.MinMaxWidth}
 
-procedure TSection.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TSection.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 {Min is the width the section would occupy when wrapped as tightly as possible.
  Max, the width if no wrapping were used.}
 
@@ -11781,7 +11825,7 @@ procedure TSection.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
     for I := 0 to Objects.Count - 1 do {call drawlogic for all the objects}
     begin
       Obj := Objects[I];
-      Obj.DrawLogicInline(Canvas, Fonts.GetFontObjAt(Obj.StartCurs), 0, 0);
+      Obj.DrawLogicInline(Canvas, Fonts.GetFontObjAt(Obj.StartCurs), AvailableWidth, AvailableHeight);
       if not Obj.PercentWidth then
       begin
         if Obj.Positioning in [posAbsolute, posFixed] then
@@ -11878,7 +11922,7 @@ begin
     {find the next string of chars that can't be wrapped}
     begin
       SoftHyphen := False;
-      if CanWrap(P1^) and (Brk[I - 1] = twYes) then
+      if CanWrap(P1) and (Brk[I - 1] = twYes) then
       begin
         Inc(P1);
         Inc(I);
@@ -11892,9 +11936,9 @@ begin
             twSoft, twOptional:
               break;
           end;
-        until (P1^ = #0) or (CanWrap(P1^) and (Brk[I - 1] = twYes));
+        until (P1^ = #0) or (CanWrap(P1) and (Brk[I - 1] = twYes));
         SoftHyphen := Brk[I - 2] = twSoft;
-        if CanWrapAfter(P1^) then
+        if CanWrapAfter(P1) then
         begin
           Inc(P1);
           Inc(I);
@@ -12677,7 +12721,7 @@ function TSection.DrawLogic1(Canvas: TCanvas; X, Y, XRef, YRef, AWidth, AHeight,
                 break;
 
             else
-              if CanWrap(P^) or WrapChar((P + 1)^) then
+              if CanWrap(P) or WrapChar((P + 1)^) then
                 break; // can wrap after this or before next char.
             end;
             Dec(P);
@@ -12692,7 +12736,7 @@ function TSection.DrawLogic1(Canvas: TCanvas; X, Y, XRef, YRef, AWidth, AHeight,
             begin
               P := PStart + N - 1;
 
-              while (P <> Last) and not CanWrapAfter(P^) and not (Brk[P - Buff] in [twSoft, twOptional])
+              while (P <> Last) and not CanWrapAfter(P) and not (Brk[P - Buff] in [twSoft, twOptional])
               do
               begin
                 case Brk[P - Buff + 1] of
@@ -12842,7 +12886,7 @@ begin {TSection.DrawLogic}
       IMgr.Width := 32000;
       DoDrawLogic;
       IMgr.Width := Save;
-      MinMaxWidth(Canvas, Dummy, MaxWidth); {return MaxWidth}
+      MinMaxWidth(Canvas, Dummy, MaxWidth, AWidth, AHeight); {return MaxWidth}
       DrawRect.Right := DrawRect.Left + MaxWidth;
       exit;
     end;
@@ -13343,7 +13387,7 @@ var
           NewCP := Addon <> 0;
         end;
 
-        if not Document.NoOutput then
+        if not Document.NoOutput and (Canvas.Font.Size <> 0) and (Canvas.Font.Color <> clNone) then
         begin
           Tmp := I;
           if Cnt - I <= 0 then
@@ -13351,6 +13395,7 @@ var
               ' ', BrkCh:
                 Dec(Tmp); {at end of line, don't show space or break}
             end;
+
           if (WhiteSpaceStyle in [wsPre, wsPreLine, wsNoWrap]) and not OwnerBlock.HideOverflow then
           begin {so will clip in Table cells}
             ARect := Rect(IMgr.LfEdge, Y - LR.LineHt - LR.SpaceBefore - YOffset, X + IMgr.ClipWidth, Y - YOffset + 1);
@@ -13396,37 +13441,36 @@ var
             Canvas.Brush.Color := clWhite;
             Canvas.Rectangle(CPx, Tmp, CPx + 1, Tmp - FO.FontHeight);
           end;
-        end;
 
-        if FO.Active or IsCopy and Assigned(Document.LinkDrawnEvent)
-          and (FO.UrlTarget.Url <> '') then
-        begin
-          Tmp := Y - Descent + FO.Descent + Addon - YOffset;
-          ARect := Rect(CPx, Tmp - FO.FontHeight, CP1x + 1, Tmp);
-          if FO.Active then
+          if FO.Active or IsCopy and Assigned(Document.LinkDrawnEvent)
+            and (FO.UrlTarget.Url <> '') then
           begin
-            Canvas.Font.Color := clBlack; {black font needed for DrawFocusRect}
-            Canvas.Handle; {Dummy call needed to make Delphi add font color change to handle}
-            if Document.TheOwner.ShowFocusRect then //MK20091107
-              Canvas.DrawFocusRect(ARect);
+            Tmp := Y - Descent + FO.Descent + Addon - YOffset;
+            ARect := Rect(CPx, Tmp - FO.FontHeight, CP1x + 1, Tmp);
+            if FO.Active then
+            begin
+              Canvas.Font.Color := clBlack; {black font needed for DrawFocusRect}
+              Canvas.Handle; {Dummy call needed to make Delphi add font color change to handle}
+              if Document.TheOwner.ShowFocusRect then //MK20091107
+                Canvas.DrawFocusRect(ARect);
+            end;
+            if Assigned(Document.LinkDrawnEvent) then
+              Document.LinkDrawnEvent(Document.TheOwner, Document.LinkPage,
+                FO.UrlTarget.Url, FO.UrlTarget.Target, ARect);
           end;
-          if Assigned(Document.LinkDrawnEvent) then
-            Document.LinkDrawnEvent(Document.TheOwner, Document.LinkPage,
-              FO.UrlTarget.Url, FO.UrlTarget.Target, ARect);
-        end;
-        CPx := CP1x;
+          CPx := CP1x;
 
-      {the following puts a dummy caret at the very end of text if it should be there}
-        if Document.ShowDummyCaret and not Inverted
-          and ((MySelB = Len) and (Document.SelB = Document.Len))
-          and (Cnt = I) and (LineNo = Lines.Count - 1) then
-        begin
-          Canvas.Pen.Color := Canvas.Font.Color;
-          Tmp := Y - Descent + FO.Descent + Addon - YOffset;
-          Canvas.Brush.Color := clWhite;
-          Canvas.Rectangle(CPx, Tmp, CPx + 1, Tmp - FO.FontHeight);
+        {the following puts a dummy caret at the very end of text if it should be there}
+          if Document.ShowDummyCaret and not Inverted
+            and ((MySelB = Len) and (Document.SelB = Document.Len))
+            and (Cnt = I) and (LineNo = Lines.Count - 1) then
+          begin
+            Canvas.Pen.Color := Canvas.Font.Color;
+            Tmp := Y - Descent + FO.Descent + Addon - YOffset;
+            Canvas.Brush.Color := clWhite;
+            Canvas.Rectangle(CPx, Tmp, CPx + 1, Tmp - FO.FontHeight);
+          end;
         end;
-
       end;
       Dec(Cnt, I);
       Inc(Start, I);
@@ -14997,13 +15041,13 @@ end;
 { TFieldsetBlock }
 
 //-- BG ---------------------------------------------------------- 09.10.2010 --
-procedure TFieldsetBlock.ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TFieldsetBlock.ContentMinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 var
   LegendMin, LegendMax: Integer;
   ContentMin, ContentMax: Integer;
 begin
-  Legend.MinMaxWidth(Canvas, LegendMin, LegendMax);
-  inherited ContentMinMaxWidth(Canvas, ContentMin, ContentMax);
+  Legend.MinMaxWidth(Canvas, LegendMin, LegendMax, AvailableWidth, AvailableHeight);
+  inherited ContentMinMaxWidth(Canvas, ContentMin, ContentMax, AvailableWidth, AvailableHeight);
   Min := Math.Max(ContentMin, LegendMin);
   Max := Math.Max(ContentMax, LegendMax);
 end;
@@ -15222,50 +15266,92 @@ end;
 //-- BG ---------------------------------------------------------- 12.11.2011 --
 procedure TSizeableObj.CalcSize(AvailableWidth, AvailableHeight, SetWidth, SetHeight: Integer; IsClientSizeSpecified: Boolean);
 // Extracted from TPanelObj.DrawLogic() and TImageObj.DrawLogic()
+
+  function CroppedSize(S: Integer; piMin, piMax: ThtPropertyIndex): Integer;
+  begin
+    Result := S;
+
+    if MargArray[piMax] > 0 then
+      Result := Min(Result, MargArray[piMax]);
+
+    if MargArray[piMin] > 0 then
+      Result := Max(Result, MargArray[piMin]);
+  end;
+
+var
+  MargArrayO: ThtVMarginArray;
+  H, W: Integer;
 begin
+  if FProperties <> nil then
+    FProperties.GetVMarginArray(MargArrayO)
+  else
+  begin
+    MargArrayO[piMinWidth] := IntNull;
+    MargArrayO[piMaxWidth] := IntNull;
+    MargArrayO[piMinHeight] := IntNull;
+    MargArrayO[piMaxHeight] := IntNull;
+  end;
+
+  ConvInlineMargArray(MargArrayO, AvailableWidth, AvailableHeight, EmSize, ExSize, BorderWidth, MargArray);
+
   if PercentWidth then
   begin
-    ClientWidth := MulDiv(AvailableWidth, SpecWidth, 100);
+    W := CroppedSize(MulDiv(AvailableWidth, SpecWidth, 100), piMinWidth, piMaxWidth);
     if SpecHeight > 0 then
       if PercentHeight then
-        ClientHeight := MulDiv(AvailableHeight, SpecHeight, 100)
+        H := MulDiv(AvailableHeight, SpecHeight, 100)
       else
-        ClientHeight := SpecHeight
+        H := SpecHeight
     else
-      ClientHeight := MulDiv(ClientWidth, SetHeight, SetWidth);
+      H := MulDiv(W, SetHeight, SetWidth);
+    H := CroppedSize(H, piMinHeight, piMaxHeight);
   end
   else if PercentHeight then
   begin
-    ClientHeight := MulDiv(AvailableHeight, SpecHeight, 100);
+    H := CroppedSize(MulDiv(AvailableHeight, SpecHeight, 100), piMinHeight, piMaxHeight);
     if SpecWidth > 0 then
-      ClientWidth := SpecWidth
+      W := SpecWidth
     else
-      ClientWidth := MulDiv(ClientHeight, SetWidth, SetHeight);
+      W := MulDiv(H, SetWidth, SetHeight);
+    W := CroppedSize(W, piMinWidth, piMaxWidth);
   end
   else if (SpecWidth > 0) and (SpecHeight > 0) then
   begin {Both width and height specified}
-    ClientHeight := SpecHeight;
-    ClientWidth := SpecWidth;
+    H := SpecHeight;
+    W := SpecWidth;
+    H := CroppedSize(H, piMinHeight, piMaxHeight);
+    W := CroppedSize(W, piMinWidth, piMaxWidth);
     ClientSizeKnown := True;
   end
   else if SpecHeight > 0 then
   begin
-    ClientHeight := SpecHeight;
-    ClientWidth := MulDiv(SpecHeight, SetWidth, SetHeight);
+    H := SpecHeight;
+    H := CroppedSize(H, piMinHeight, piMaxHeight);
+    W := MulDiv(H, SetWidth, SetHeight);
+    W := CroppedSize(W, piMinWidth, piMaxWidth);
     ClientSizeKnown := IsClientSizeSpecified;
   end
   else if SpecWidth > 0 then
   begin
-    ClientWidth := SpecWidth;
-    ClientHeight := MulDiv(SpecWidth, SetHeight, SetWidth);
+    W := SpecWidth;
+    W := CroppedSize(W, piMinWidth, piMaxWidth);
+    H := MulDiv(W, SetHeight, SetWidth);
+    H := CroppedSize(H, piMinHeight, piMaxHeight);
     ClientSizeKnown := IsClientSizeSpecified;
   end
   else
   begin {neither height and width specified}
-    ClientHeight := SetHeight;
-    ClientWidth := SetWidth;
+    H := SetHeight;
+    W := SetWidth;
+    CalcAutoMinMaxConstraints(W, H, MargArray[piMinWidth], MargArray[piMaxWidth], MargArray[piMinHeight], MargArray[piMaxHeight], W, H);
     ClientSizeKnown := IsClientSizeSpecified;
   end;
+
+  ClientWidth := W;
+  ClientHeight := H;
+  if ClientSizeKnown then
+    if (Pos('%', MargArrayO[piMinWidth]) > 0) or (Pos('%', MargArrayO[piMaxWidth]) > 0) or (Pos('%', MargArrayO[piMinHeight]) > 0) or (Pos('%', MargArrayO[piMaxHeight]) > 0) then
+      ClientSizeKnown := False;
 end;
 
 //-- BG ---------------------------------------------------------- 12.11.2011 --
@@ -15776,7 +15862,7 @@ begin
   FDocument := List;
 end;
 
-procedure TSectionBase.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer);
+procedure TSectionBase.MinMaxWidth(Canvas: TCanvas; out Min, Max: Integer; AvailableWidth, AvailableHeight: Integer);
 begin
   Min := 0;
   Max := 0;
