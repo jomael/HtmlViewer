@@ -51,6 +51,11 @@ type
 
 implementation
 
+{$if lcl_fullversion >= 1080000}
+uses
+  LCLPlatformDef;
+{$ifend}
+
 {$ifdef LCL}
   {$R *.lfm}
 {$else}
