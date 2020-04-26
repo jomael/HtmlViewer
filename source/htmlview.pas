@@ -1,7 +1,7 @@
 {
-Version   11.8
+Version   11.9
 Copyright (c) 1995-2008 by L. David Baldwin
-Copyright (c) 2008-2017 by HtmlViewer Team
+Copyright (c) 2008-2018 by HtmlViewer Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -43,6 +43,7 @@ uses
 {$ifndef NoMetafile}
   MetaFilePrinter, vwPrint,
 {$endif}
+  UrlConn,
   URLSubs,
   HtmlGlobals,
   HtmlBuffer,
@@ -378,6 +379,9 @@ type
     procedure InsertImages;
     function GetDocumentCodePage: Integer;
     procedure SetText(const Value: ThtString);
+    procedure LoadFromUrl(const Url: ThtString; DocType: THtmlFileType);
+    procedure LoadResource(HInstance: THandle; const ResourceName: ThtString;
+      DocType: THtmlFileType);
 {$ifdef HasGestures}
     procedure HtmlGesture(Sender: TObject; const EventInfo: TGestureEventInfo; var Handled: Boolean);
 {$endif}
@@ -503,6 +507,7 @@ type
     procedure LoadFromFile(const FileName: ThtString; DocType: THtmlFileType = HtmlType);
     procedure LoadFromStream(const AStream: TStream; const Reference: ThtString = ''; DocType: THtmlFileType = HtmlType);
     procedure LoadFromString(const S: ThtString; const Reference: ThtString = ''; DocType: THtmlFileType = HtmlType);
+    procedure LoadFromResource(HInstance: THandle; const ResourceName: ThtString; DocType: THtmlFileType = HtmlType);
 {$ifdef UseDeprecatedLoadMethods}
     // due to reduction of code duplications the following methods became obsolete:
     procedure LoadFromBuffer(Buffer: PChar; BufLenTChars: Integer; const Reference: ThtString = ''); deprecated; // use LoadFromString() instead
@@ -531,7 +536,7 @@ type
     property CurrentFile: ThtString read FCurrentFile;
     property DocumentCodePage: Integer read GetDocumentCodePage;
 //    property DocumentSource: ThtString read GetDocumentSource;
-    property DocumentTitle: ThtString read FTitle;
+    property DocumentTitle: ThtString read FTitle write FTitle;
     property FormControlList: TFormControlObjList read GetFormControlList;
     property FormData: TFormData read GetFormData write SetFormData;
     property History: ThvHistory read FHistory;
@@ -689,7 +694,7 @@ function GetFileType(const S: ThtString): THtmlFileType;
 var
   FileTypes: ThtStringList;
 
-function GetFileMask : String;
+function GetFileMask : ThtString;
 
 implementation
 
@@ -726,7 +731,7 @@ type
 //-- BG ---------------------------------------------------------- 12.05.2013 --
 procedure InitFileTypes;
 const
-  FileTypeDefinitions: array [1..23] of TFileTypeRec = (
+  FileTypeDefinitions: array [1..34] of TFileTypeRec = (
     (FileExt: '.htm';   FileType: HTMLType),
     (FileExt: '.html';  FileType: HTMLType),
 
@@ -737,6 +742,8 @@ const
 
     (FileExt: '.xhtml'; FileType: XHtmlType),
     (FileExt: '.xht';   FileType: XHtmlType),
+
+    (FileExt: '.txt';   FileType: TextType),
 
     (FileExt: '.gif';   FileType: ImgType),
     (FileExt: '.jpg';   FileType: ImgType),
@@ -755,7 +762,19 @@ const
     (FileExt: '.tiff';  FileType: ImgType),
     (FileExt: '.tif';   FileType: ImgType),
 
-    (FileExt: '.txt';   FileType: TextType)
+    (FileExt: '.mp3';   FileType: AudioType),
+    (FileExt: '.ogg';   FileType: AudioType),
+
+    (FileExt: '.mp4';   FileType: VideoType),
+    (FileExt: '.webm';  FileType: VideoType),
+    (FileExt: '.mkv';   FileType: VideoType),
+    (FileExt: '.mpg';   FileType: VideoType),
+    (FileExt: '.mpeg';  FileType: VideoType),
+    (FileExt: '.wmv';   FileType: VideoType),
+    (FileExt: '.flv';   FileType: VideoType),
+    (FileExt: '.avi';   FileType: VideoType),
+
+    (FileExt: '.pdf';   FileType: PdfType)
   );
 var
   I: Integer;
@@ -776,7 +795,7 @@ begin
 end;
 
 //-- JPM --------------------------------------------------------- 26.05.2013 --
-function GetFileMask : String;
+function GetFileMask : ThtString;
 var i : Integer;
 begin
   //HTML
@@ -786,7 +805,7 @@ begin
     if (PFileTypeRec(FileTypes.Objects[i]).FileType = HTMLType) or
      (PFileTypeRec(FileTypes.Objects[i]).FileType = XHTMLType) then
     begin
-      Result := Result + '*'+ FileTypes[i]+';';
+      Result := Result + '*' + FileTypes[i] + ';';
     end;
 
   end;
@@ -797,7 +816,7 @@ begin
   begin
     if (PFileTypeRec(FileTypes.Objects[i]).FileType = ImgType) then
     begin
-      Result := Result + '*'+ FileTypes[i]+';';
+      Result := Result + '*' + FileTypes[i] + ';';
     end;
 
   end;
@@ -808,7 +827,7 @@ begin
   begin
     if (PFileTypeRec(FileTypes.Objects[i]).FileType = TextType) then
     begin
-      Result := Result + '*'+ FileTypes[i]+';';
+      Result := Result + '*' + FileTypes[i] + ';';
     end;
   end;
   Delete(Result,Length(Result),1);
@@ -857,7 +876,7 @@ begin
 
   FPaintPanel := TPaintPanel.CreateIt(Self, Self);
   FPaintPanel.ParentFont := False;
-  FPaintPanel.Parent := self;
+  FPaintPanel.Parent := FBorderPanel; //Self;
   FPaintPanel.BevelOuter := bvNone;
   FPaintPanel.BevelInner := bvNone;
 {$ifndef LCL}
@@ -872,6 +891,7 @@ begin
   FPaintPanel.Touch := Touch;
   FPaintPanel.OnGesture := HtmlGesture;
 {$endif}
+
   FVScrollBar := TScrollBar.Create(Self);
   FVScrollBar.Kind := sbVertical;
   FVScrollBar.SmallChange := 16;
@@ -879,7 +899,7 @@ begin
   FVScrollBar.Visible := False;
   FVScrollBar.TabStop := False;
   sbWidth := FVScrollBar.Width;
-  FVScrollBar.Parent := Self;
+  FVScrollBar.Parent := FBorderPanel; //Self;
 
   FHScrollBar := TScrollBar.Create(Self);
   FHScrollBar.Kind := sbHorizontal;
@@ -887,7 +907,7 @@ begin
   FHScrollBar.OnScroll := ScrollHorz;
   FHScrollBar.Visible := False;
   FHScrollBar.TabStop := False;
-  FHScrollBar.Parent := Self;
+  FHScrollBar.Parent := FBorderPanel; //Self;
 
   FScrollBars := ssBoth;
 
@@ -1096,9 +1116,10 @@ begin
       Name := ShortName
     else
 {$endif}
-    raise EhtLoadError.CreateFmt('Can''t locate ''%s''.', [Name]);
+    raise EhtLoadError.CreateFmt('Can''t locate file ''%s''.', [Name]);
   end;
-  Stream := TFileStream.Create(Name, fmOpenRead or fmShareDenyWrite);
+
+  Stream := TFileStream.Create( htStringToString(Name), fmOpenRead or fmShareDenyWrite);
   try
     LoadStream(Name + Dest, Stream, ft);
   finally
@@ -1207,7 +1228,22 @@ end;
 procedure THtmlViewer.Load(const Url: ThtString);
 begin
   inherited;
-  LoadFromFile(Url);
+  LoadFromUrl(Url, HTMLType);
+end;
+
+//-- BG ---------------------------------------------------------- 11.03.2019 --
+procedure THtmlViewer.LoadFromUrl(const Url: ThtString; DocType: THtmlFileType);
+var
+  Scheme, Specific, ResType: ThtString;
+begin
+  SplitScheme(Url, Scheme, Specific);
+  if Scheme = 'res' then
+  begin
+    Specific := HTMLToRes(Url, ResType);
+    LoadFromResource(HInstance, Specific, DocType);
+  end
+  else
+    LoadFromFile(Url, DocType);
 end;
 
 //-- BG ---------------------------------------------------------- 01.01.2012 --
@@ -1310,7 +1346,7 @@ begin
       end;
     finally
       Exclude(FViewerState, vsDontDraw);
-      if LoadCursor <> crNone then
+      if LoadCursor <> crDefault then
         Screen.Cursor := OldCursor;
     end;
   finally
@@ -1349,6 +1385,64 @@ end;
 procedure THtmlViewer.LoadFromStream(const AStream: TStream; const Reference: ThtString; DocType: ThtmlFileType);
 begin
   LoadStream(Reference, AStream, DocType);
+end;
+
+//-- BG ---------------------------------------------------------- 10.03.2019 --
+procedure THtmlViewer.LoadResource(HInstance: THandle; const ResourceName: ThtString; DocType: THtmlFileType);
+var
+  Stream: TResourceStream;
+  Scheme, Name: ThtString;
+begin
+  SplitScheme(ResourceName, Scheme, Name);
+  if Scheme = '' then
+    Scheme := 'res:///';
+
+  Stream := ThtResourceConnection.CreateResourceStream(HInstance, Name, DocType);
+  if Stream <> nil then
+  begin
+    try
+      LoadStream(Scheme + Name, Stream, DocType);
+    finally
+      Stream.Free;
+    end;
+  end
+  else
+    raise EhtLoadError.CreateFmt('Can''t locate resource ''%s''.', [ResourceName]);
+end;
+
+//-- BG ---------------------------------------------------------- 10.03.2019 --
+procedure THtmlViewer.LoadFromResource(HInstance: THandle; const ResourceName: ThtString; DocType: THtmlFileType);
+var
+  OldFile, OldTitle: ThtString;
+  OldPos: Integer;
+  OldType: ThtmlFileType;
+  OldFormData: TFormData;
+begin
+  if IsProcessing then
+    Exit;
+{$ifdef FPC}
+  // in lazarus 1.4.0 with fpc 2.6.4
+  // htmlviewer will not draw properly if focused
+  RemoveFocus(false);
+{$endif}
+  if ResourceName <> '' then
+  begin
+    OldFile := FCurrentFile;
+    OldTitle := FTitle;
+    OldPos := Position;
+    OldType := FCurrentFileType;
+    OldFormData := GetFormData;
+    try
+      LoadResource(HInstance, ResourceName, DocType);
+      if (OldFile <> FCurrentFile) or (OldType <> FCurrentFileType) then
+        BumpHistory(OldFile, OldTitle, OldPos, OldFormData, OldType)
+      else
+        OldFormData.Free;
+    except
+      OldFormData.Free;
+      raise;
+    end;
+  end;
 end;
 
 //-- BG ---------------------------------------------------------- 23.03.2012 --
@@ -1547,13 +1641,24 @@ var
   LogicDoneNeg: array [0..3] of integer;
 
 procedure THtmlViewer.DoLoadHistoryItem(HI: ThvHistoryItem);
-var Handled: Boolean;
+var
+  Handled: Boolean;
+  Scheme, Specific, ResType: ThtString;
 begin
   Handled := False;
   if Assigned(FOnLoadHistoryItem) then
     FOnLoadHistoryItem(Self, HI, Handled);
   if not Handled then
-    LoadFile(HI.Url, HI.FileType);
+  begin
+    SplitScheme(HI.Url, Scheme, Specific);
+    if Scheme = 'res' then
+    begin
+      Specific := HTMLToRes(HI.Url, ResType);
+      LoadResource(HInstance, Specific, HI.FileType);
+    end
+    else
+      LoadFile(HI.Url, HI.FileType);
+  end;
 end;
 
 procedure THtmlViewer.DoLogic;
@@ -1824,7 +1929,7 @@ begin
         XHtmlType:
           if S <> FCurrentFile then
           begin
-            LoadFromFile(S + Dest, ft);
+            LoadFromUrl(S + Dest, ft);
             AddVisitedLink(S + Dest);
           end
           else if PositionTo(Dest) then {file already loaded, change position}
@@ -1832,7 +1937,7 @@ begin
 
         ImgType,
         TextType:
-          LoadFromFile(S + Dest, ft);
+          LoadFromUrl(S + Dest, ft);
       end;
     end;
     {Note: Self may not be valid here}
@@ -1978,16 +2083,19 @@ procedure THtmlViewer.HTMLTimerTimer(Sender: TObject);
 var
   Pt: TPoint;
 begin
-  if not PaintPanel.HandleAllocated or (GetCursorPos(Pt) and (WindowFromPoint(Pt) <> PaintPanel.Handle)) then
+  if HTMLTimer.Enabled then
   begin
-    SectionList.CancelActives;
     HTMLTimer.Enabled := False;
-    if FURL <> '' then
+    if not PaintPanel.HandleAllocated or (GetCursorPos(Pt) and (WindowFromPoint(Pt) <> PaintPanel.Handle)) then
     begin
-      FURL := '';
-      FTarget := '';
-      if Assigned(FOnHotSpotCovered) then
-        FOnHotSpotCovered(Self, '');
+      SectionList.CancelActives;
+      if FURL <> '' then
+      begin
+        FURL := '';
+        FTarget := '';
+        if Assigned(FOnHotSpotCovered) then
+          FOnHotSpotCovered(Self, '');
+      end;
     end;
   end;
 end;
@@ -2566,9 +2674,14 @@ begin
     Exit;
   if Value <> FSectionList.ShowImages then
   begin
-    OldCursor := Screen.Cursor;
+    if LoadCursor <> crDefault then
+    begin
+      OldCursor := Screen.Cursor;
+      Screen.Cursor := LoadCursor;
+    end
+    else
+      OldCursor := crDefault; // valium for the compiler
     try
-      Screen.Cursor := crHourGlass;
       SetProcessing(True);
       FSectionList.ShowImages := Value;
       if FSectionList.Count > 0 then
@@ -2580,7 +2693,8 @@ begin
         Invalidate;
       end;
     finally
-      Screen.Cursor := OldCursor;
+      if LoadCursor <> crDefault then
+        Screen.Cursor := OldCursor;
       SetProcessing(False);
     end;
   end;
@@ -2947,12 +3061,36 @@ end;
 
 function THtmlViewer.HTMLExpandFilename(const Filename, CurrentFilename: ThtString): ThtString;
 var
-  Scheme: ThtString;
-  Specific: ThtString;
+  FileScheme: ThtString;
+  FileSpecific: ThtString;
+  CurrFile: ThtString;
+  CurrScheme: ThtString;
+  CurrSpecific: ThtString;
 begin
   {pass http: and other protocols except for file:///}
-  SplitScheme(Filename, Scheme, Specific);
-  if (Length(Scheme) > 0) and (htCompareStr(Scheme, 'file') <> 0) then
+  if Length(CurrentFilename) > 0 then
+    CurrFile := CurrentFilename
+  else
+    CurrFile := FCurrentFile;
+
+  SplitScheme(Filename, FileScheme, FileSpecific);
+  SplitScheme(CurrFile, CurrScheme, CurrSpecific);
+
+  if (Length(CurrScheme) > 0) and (htCompareStr(CurrScheme, 'file') <> 0) then
+  begin
+    Result := FileName;
+    if Pos('\', Result) > 0 then
+      Result := DosToHTML(Result);
+
+    if not IsFullUrl(Result) then
+    begin
+      if Pos('//', Result) = 1 then
+        Result := CurrScheme + ':' + Result
+      else
+        Result := CombineURL(GetURLBase(CurrFile), Result);
+    end;
+  end
+  else if (Length(FileScheme) > 0) and (htCompareStr(FileScheme, 'file') <> 0) then
     Result := Filename
   else
   begin
@@ -3766,6 +3904,7 @@ begin
   OK := False;
   if (MediaQuery.MediaType in [mtAll, mtScreen]) xor MediaQuery.Negated then
   begin
+	OK := True; // even there are no expressions, we force to re-init OK-value valid, because it matches
     for I := Low(MediaQuery.Expressions) to High(MediaQuery.Expressions) do
     begin
       OK := EvaluateExpression(MediaQuery.Expressions[I]);
@@ -4608,7 +4747,7 @@ begin
 {$endif}
   UpdateImageCache;
   FSectionList.SetFonts(
-    DefFontName, DefPreFontName, DefFontSize, DefFontColor,
+    htString(DefFontName), htString(DefPreFontName), DefFontSize, DefFontColor,
     DefHotSpotColor, DefVisitedLinkColor, DefOverLinkColor, DefBackground,
     htOverLinksActive in FOptions, not (htNoLinkUnderline in FOptions),
     CodePage, CharSet, MarginHeight, MarginWidth);
@@ -4634,7 +4773,7 @@ begin
   FCurrentFileType := HTMLType;
 
   FSectionList.SetFonts(
-    DefFontName, DefPreFontName, DefFontSize, DefFontColor,
+    htString(DefFontName), htString(DefPreFontName), DefFontSize, DefFontColor,
     DefHotSpotColor, DefVisitedLinkColor, DefOverLinkColor, DefBackground,
     htOverLinksActive in FOptions, not (htNoLinkUnderline in FOptions),
     CodePage, CharSet, MarginHeight, MarginWidth);
@@ -4760,10 +4899,10 @@ function THtmlViewer.GetSelHtml: UTF8String;
       EndFragmentIndex    := StartHTMLIndex + Pos(AnsiString(EndFrag), Utf8Html) - 1;
 
       // insert indexes into header:        IndexLength must match the format width:
-      InsertAfter(Header, 'StartHTML:'    , Format('%.10d', [StartHTMLIndex]));
-      InsertAfter(Header, 'EndHTML:'      , Format('%.10d', [EndHTMLIndex]));
-      InsertAfter(Header, 'StartFragment:', Format('%.10d', [StartFragmentIndex]));
-      InsertAfter(Header, 'EndFragment:'  , Format('%.10d', [EndFragmentIndex]));
+      InsertAfter(Header, 'StartHTML:'    , htString(Format('%.10d', [StartHTMLIndex])));
+      InsertAfter(Header, 'EndHTML:'      , htString(Format('%.10d', [EndHTMLIndex])));
+      InsertAfter(Header, 'StartFragment:', htString(Format('%.10d', [StartFragmentIndex])));
+      InsertAfter(Header, 'EndFragment:'  , htString(Format('%.10d', [EndFragmentIndex])));
 
       // return the complete clipboard text
       Result := UTF8Encode(Header) + Utf8Html;
@@ -4776,7 +4915,7 @@ function THtmlViewer.GetSelHtml: UTF8String;
       LTML: ThtString;
       C: ThtChar;
     begin
-      C := #0; // valium for Delphi 2009+
+      {$IFNDEF Compiler32_Plus}C := #0;{$ENDIF} // valium for Delphi 2009+
       LTML := htLowerCase(HTML);
       repeat
         I := Pos(Tag, LTML);
@@ -4822,8 +4961,8 @@ function THtmlViewer.GetSelHtml: UTF8String;
         I := Pos('<html>', L);
       if I <= 0 then
         I := 1;
-      S := '<style> body {font-size: ' + IntToStr(DefFontSize) + 'pt; font-family: "' +
-        DefFontName + '"; }</style>';
+      S := htString('<style> body {font-size: ' + IntToStr(DefFontSize) + 'pt; font-family: "' +
+        DefFontName + '"; }</style>');
       if not HeadFound then
         S := '<head>' + S + '</head>';
       Insert(S, HTML, I);
@@ -5086,7 +5225,7 @@ begin
   if FCurrentFile <> '' then
   begin
     Pos := Position;
-    LoadFromFile(FCurrentFile, FCurrentFileType);
+    LoadFromUrl(FCurrentFile, FCurrentFileType);
     Position := Pos;
   end;
 end;
@@ -5165,9 +5304,9 @@ begin
     begin
       I := Pos(';', Content);
       if I > 0 then
-        DelTime := StrToIntDef(copy(Content, 1, I - 1), -1)
+        DelTime := StrToIntDef(copy(htStringToString(Content), 1, I - 1), -1)
       else
-        DelTime := StrToIntDef(Content, -1);
+        DelTime := StrToIntDef(htStringToString(Content), -1);
       if DelTime < 0 then
         Exit
       else if DelTime = 0 then
@@ -5403,14 +5542,25 @@ end;
 procedure THtmlViewer.htStreamRequest(var Url: ThtString; var Stream: TStream; out PathOfUrl: ThtString);
 
   procedure GetTheFile;
+  var
+    Scheme, Specific, ResType: ThtString;
   begin
     Url := HTMLExpandFilename(Url);
-    PathOfUrl := ExtractFilePath(Url);
-    if FileExists(Url) then
+    SplitScheme(Url, Scheme, Specific);
+    if Scheme = 'res' then
     begin
-      Stream := TFileStream.Create(Url, fmOpenRead or fmShareDenyWrite);
-      FObjects.Add(Stream);
+      Specific := HTMLToRes(Url, ResType);
+      Stream := ThtResourceConnection.CreateResourceStream(HInstance, Specific, FileExt2DocType(ResType) );
+    end
+    else
+    begin
+      PathOfUrl := ExtractFilePath(Url);
+      if FileExists(Url) then
+        Stream := TFileStream.Create( htStringToString(Url), fmOpenRead or fmShareDenyWrite);
     end;
+
+    if Stream <> nil then
+      FObjects.Add(Stream);
   end;
 
 begin

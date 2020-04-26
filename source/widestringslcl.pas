@@ -1,12 +1,13 @@
-unit WideStringsLcl;
+//unit WideStringsLcl;
+//
+//{$mode objfpc}{$H+}
+//
+//interface
+//
+//uses
+//  Classes, SysUtils;
 
-{$mode objfpc}{$H+}
-
-interface
-
-uses
-  Classes, SysUtils;
-
+{$ifdef SECTION_INTERFACE}
 type
 
   TWideStrings = class;
@@ -52,7 +53,7 @@ type
   protected
     procedure DefineProperties(Filer: TFiler); override;
     procedure Error(const Msg: WideString; Data: integer);
-    procedure Error(const Msg: pstring; Data: integer);
+//    procedure Error(const Msg: pstring; Data: integer);
     function Get(Index: integer): WideString; virtual; abstract;
     function GetCapacity: integer; virtual;
     function GetCount: integer; virtual; abstract;
@@ -188,8 +189,11 @@ Const
   // Ratio of Pointer and Word Size.
   WordRatio = SizeOf(Pointer) Div SizeOf(Word);
 
+{$endif}
 
-implementation
+//implementation
+
+{$ifdef SECTION_IMPLEMENTATION}
 
 {****************************************************************************}
 {*                        TWideStringsEnumerator                                *}
@@ -555,7 +559,7 @@ begin
       HasData := True
   else
     HasData := Count > 0;
-  Filer.DefineProperty('Strings', @ReadData, @WriteData, HasData);
+  Filer.DefineProperty('Strings', ReadData, WriteData, HasData);
 end;
 
 procedure TWideStrings.Error(const Msg: WideString; Data: integer);
@@ -563,10 +567,10 @@ begin
   raise EStringListError.CreateFmt(Msg, [Data]) at get_caller_addr(get_frame);
 end;
 
-procedure TWideStrings.Error(const Msg: pstring; Data: integer);
-begin
-  raise EStringListError.CreateFmt(Msg^, [Data]) at get_caller_addr(get_frame);
-end;
+//procedure TWideStrings.Error(const Msg: pstring; Data: integer);
+//begin
+//  raise EStringListError.CreateFmt(Msg^, [Data]) at get_caller_addr(get_frame);
+//end;
 
 function TWideStrings.GetCapacity: integer;
 begin
@@ -1313,6 +1317,6 @@ begin
   CustomSort(@StringListAnsiCompare);
 end;
 
-
-end.
+{$endif}
+//end.
 

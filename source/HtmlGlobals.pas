@@ -1,6 +1,6 @@
 {
-Version   11.7
-Copyright (c) 2008-2016 by HtmlViewer Team
+Version   11.9
+Copyright (c) 2008-2018 by HtmlViewer Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -44,7 +44,6 @@ uses
   LclIntf, LclType, LCLVersion, Types, Messages,
   StdCtrls, Buttons, Forms, Base64, Dialogs, Process,
   HtmlMisc,
-  WideStringsLcl,
   {$ifdef DebugIt}
     {$message 'HtmlViewer uses LCL standard controls.'}
   {$endif}
@@ -82,8 +81,8 @@ uses
 
 const
 {$ifndef LCL}
-  lcl_fullversion = 0;
-  fpc_fullversion = 0;
+  lcl_fullversion = Integer(0);
+  fpc_fullversion = Integer(0);
 {$endif}
 {$ifndef MSWindows}
   //Charsets defined in unit Windows:
@@ -155,6 +154,7 @@ type
     TWideStringList = class(TTntStringList);
   {$endif}
 {$endif}
+
 {$ifdef UNICODE}
   ThtChar = Char;
   ThtString = string;
@@ -162,15 +162,20 @@ type
   ThtStringList = TStringList;
   PhtChar = PChar;
 {$else}
-{$if fpc_fullversion < 30000}
-  UnicodeString = WideString;
-{$ifend}
   ThtChar = WideChar;
-  ThtString = WideString;
-  ThtStrings = TWideStrings;
-  ThtStringList = TWideStringList;
   PhtChar = PWideChar;
+  {$if fpc_fullversion < 30000}
+    UnicodeString = WideString;
+    ThtString = WideString;
+    ThtStrings = TWideStrings;
+    ThtStringList = TWideStringList;
+  {$else}
+    ThtString = UnicodeString;
+    ThtStrings = TUnicodeStrings;
+    ThtStringList = TUnicodeStringList;
+  {$ifend}
 {$endif}
+
   ThtCharArray = array of ThtChar;
   ThtStringArray = array of ThtString;
   ThtIntegerArray = array of Integer;
@@ -268,12 +273,12 @@ type
     FMask: TBitmap;
     FTransparent: boolean;
   public
-    constructor Create(WithTransparentMask: Boolean = False); overload;
+    constructor Create(WithTransparentMask: Boolean = False); reintroduce; overload;
     destructor Destroy; override;
     procedure Assign(Source: TPersistent); override;
     procedure Draw(ACanvas: TCanvas; const Rect: TRect); override;
     procedure StretchDraw(ACanvas: TCanvas; const DestRect, SrcRect: TRect);
-    property Mask: TBitmap read GetMask write SetMask;
+    property BitmapMask: TBitmap read GetMask write SetMask;
     property WithTransparentMask: Boolean read FTransparent write SetTransparentMask;
   end;
 
@@ -299,16 +304,23 @@ const
   FontSerif   = ThtString('Times New Roman');
   FontMono    = ThtString('Courier New');
   FontSans    = ThtString('Arial');
-  FontCursive = ThtString('Lucida Handwriting');
   FontHelvet  = ThtString('Arial');
-{$endif}
+  FontCursive = ThtString('Lucida Handwriting');
+{$endif MSWindows}
 {$ifdef Linux}
   FontSerif   = ThtString('Serif');
   FontMono    = ThtString('Monospace');
   FontSans    = ThtString('Sans');
   FontHelvet  = ThtString('Sans');
   FontCursive = ThtString('Sans');
-{$endif}
+{$endif Linux}
+{$ifdef Darwin}
+  FontSerif   = ThtString('Times');
+  FontMono    = ThtString('Courier');
+  FontSans    = ThtString('Helvetica');
+  FontHelvet  = ThtString('Helvetica');
+  FontCursive = ThtString('Apple Chancery');
+{$endif Darwin}
 
 {$ifdef LCL}
 const
@@ -465,6 +477,9 @@ function TransparentStretchBlt(DstDC: HDC; DstX, DstY, DstW, DstH: Integer;
   SrcDC: HDC; SrcX, SrcY, SrcW, SrcH: Integer; MaskDC: HDC; MaskX,
   MaskY: Integer): Boolean;
 
+function htString(const Str: String): ThtString;
+function htStringToString(const Str: ThtString): String;
+
 procedure htAppendChr(var Dest: ThtString; C: ThtChar); {$ifdef UseInline} inline; {$endif}
 procedure htAppendStr(var Dest: ThtString; const S: ThtString); {$ifdef UseInline} inline; {$endif}
 procedure htSetString(var Dest: ThtString; Chr: PhtChar; Len: Integer); {$ifdef UseInline} inline; {$endif}
@@ -547,7 +562,7 @@ begin
     FCanvas.Handle := Message.DC;
     FCanvas.Font := Font;//FTextHintFont;
     FCanvas.Font.Color := clGrayText;
-    FCanvas.TextOut(1, 1, FTextHint);
+    FCanvas.TextOut(1, 1, {$ifdef LCL} UTF8Encode(FTextHint) {$else} FTextHint {$endif});
   end;
 end;
 {$endif}
@@ -577,7 +592,7 @@ begin
     FCanvas.Handle := Message.DC;
     FCanvas.Font := Font;//FTextHintFont;
     FCanvas.Font.Color := clGrayText;
-    FCanvas.TextOut(1, 1, FTextHint);
+    FCanvas.TextOut(1, 1, {$ifdef LCL} UTF8Encode(FTextHint) {$else} FTextHint {$endif});
   end;
 end;
 {$endif}
@@ -952,6 +967,25 @@ begin
   finally
     DeleteDC(MemDC);
   end;
+end;
+
+//-- BG ---------------------------------------------------------- 19.09.2018 --
+function htString(const Str: String): ThtString;
+begin
+{$ifdef LCL}
+  Result := UTF8Decode(Str);
+{$else}
+  Result := Str;
+{$endif}
+end;
+
+function htStringToString(const Str: ThtString): String;
+begin
+{$ifdef LCL}
+  Result := UTF8Encode(Str);
+{$else}
+  Result := Str;
+{$endif}
 end;
 
 //-- BG ---------------------------------------------------------- 27.03.2011 --
@@ -1568,12 +1602,12 @@ begin
       if FTransparent then
         TransparentStretchBlt(
           ACanvas.Handle, Left, Top, Right - Left, Bottom - Top,
-          Canvas.Handle, 0, 0, Width, Height,
+          Canvas.Handle, 0, 0, Self.Width, Self.Height,
           FMask.Canvas.Handle, 0, 0) {LDB}
       else
         StretchBlt(
           ACanvas.Handle, Left, Top, Right - Left, Bottom - Top,
-          Canvas.Handle, 0, 0, Width, Height,
+          Canvas.Handle, 0, 0, Self.Width, Self.Height,
           ACanvas.CopyMode);
     finally
       if RestorePalette then

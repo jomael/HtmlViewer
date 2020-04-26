@@ -1,3 +1,28 @@
+{
+Version   11.9
+Copyright (c) 1995-2008 by L. David Baldwin
+Copyright (c) 2008-2018 by Bernd Gabriel
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Note that the source modules HTMLGIF1.PAS and DITHERUNIT.PAS
+are covered by separate copyright notices located in those modules.
+}
 unit Fontdlg;
 
 {$include ..\..\source\htmlcons.inc}
@@ -6,9 +31,12 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Dialogs, StdCtrls, Spin, Buttons,
-  StyleUn, HTMLUn2, Htmlview;
+  HtmlGlobals, StyleUn, HTMLUn2, Htmlview;
 
 type
+
+  { TFontForm }
+
   TFontForm = class(TForm)
     BackgroundColorButton: TSpeedButton;
     BackgroundColorComboBox: TComboBox;
@@ -39,7 +67,10 @@ type
     procedure BackgroundColorButtonClick(Sender: TObject);
     procedure FontNameButtonClick(Sender: TObject);
   private
-    Colors: TStringList;
+    FCustomFontColor: TColor;
+    FCustomBackgroundColor: TColor;
+    FCustomHotSpotColor: TColor;
+    Colors: ThtStringList;
     CustomColorIndex: Integer;
     InitialFontName: string;
     InitialFontSize: integer;
@@ -89,7 +120,7 @@ const
 function ColorOfIndex(Colors: TStrings; Index: Integer; DefaultColor: TColor): TColor;
 begin
   try
-    Result := TColor(Colors.Objects[Index]);
+    Result := PColor(Colors.Objects[Index])^
   except
     Result := DefaultColor;
   end;
@@ -97,12 +128,12 @@ end;
 
 function IndexOfColor(Colors: TStrings; Color: TColor; CustomColorIndex: Integer): Integer;
 begin
-  Result := Colors.IndexOfObject(TObject(Color));
-  if Result < 0 then
-  begin
-    Result := CustomColorIndex;
-    Colors.Objects[Result] := TObject(Color);
-  end;
+  for Result := 0 to Colors.Count - 1 do
+    if Color = PColor(Colors.Objects[Result])^ then
+      Exit;
+
+  Result := CustomColorIndex;
+  PColor(Colors.Objects[Result])^ := Color;
 end;
 
 procedure TFontForm.AnythingChanged(Sender: TObject);
@@ -153,15 +184,36 @@ begin
 end;
 
 procedure TFontForm.FormCreate(Sender: TObject);
+{$ifndef UNICODE}
+var
+   LColors: TStringList;
+   I: Integer;
+{$endif}
 begin
   FontNameComboBox.Items := Screen.Fonts;
-  Colors := TStringList.Create;
+  Colors := ThtStringList.Create;
   Colors.Assign(StyleUn.SortedColors);
   Colors.Sorted := True;
+  Colors.Sorted := False;
+
   CustomColorIndex := Colors.Add(CustomColor);
+{$ifndef UNICODE}
+  LColors := TStringList.Create;
+  for I := 0 to Colors.Count - 1 do
+      LColors.AddObject(Colors.Strings[I], Colors.Objects[I]);
+  FontColorComboBox.Items := LColors;
+  LinkColorComboBox.Items := LColors;
+  BackgroundColorComboBox.Items := LColors;
+  LColors.Free;
+{$else}
   FontColorComboBox.Items := Colors;
   LinkColorComboBox.Items := Colors;
   BackgroundColorComboBox.Items := Colors;
+{$endif}
+  FontColorComboBox.Items.Objects[CustomColorIndex] := @FCustomFontColor;
+  LinkColorComboBox.Items.Objects[CustomColorIndex] := @FCustomHotSpotColor;
+  BackgroundColorComboBox.Items.Objects[CustomColorIndex] := @FCustomBackgroundColor;
+
   LoadAgain;
 end;
 

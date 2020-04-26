@@ -1333,7 +1333,7 @@ var
           htAppendChr(Token, LCh);
           GetCh;
         end;
-      if CompareText(Token, '</textarea') = 0 then
+      if htCompareText(Token, '</textarea') = 0 then
         Sy := TextAreaEndSy
       else
         Sy := CommandSy; {anything else}
@@ -1626,6 +1626,10 @@ begin
         Next;
       end;
 
+    StyleEndSy:
+      // Nothing to do
+      Next;
+
   else
     Next;
   end;
@@ -1657,7 +1661,7 @@ function TCellManager.FindColNum(Row: Integer): Integer;
  go or -1 if out of range.  Columns beyond any <col> definitions are ignored}
 begin
   while Count <= Row do
-    Add(StringOfChar('o', Table.ColSpecs.Count));
+    Add( htString( StringOfChar('o', Table.ColSpecs.Count)));
   Result := Pos('o', Strings[Row]) - 1;
 end;
 
@@ -1669,7 +1673,7 @@ var
 begin
 {make sure there's enough rows to handle any RowSpan for this cell}
   while Count < Row + CellObj.RowSpan do
-    Add(StringOfChar('o', Table.ColSpecs.Count));
+    Add( htString( StringOfChar('o', Table.ColSpecs.Count)));
   I := Pos('o', Strings[Row]); {where we want to enter this cell}
   K := I;
   if I > 0 then {else it's beyond the ColInfo and we're not interested}
@@ -3205,6 +3209,10 @@ procedure THtmlParser.DoCommonSy;
                     DoStyle(LCh, Doc, '', '', False);
                     Next;
                   end;
+
+                StyleEndSy:
+                  // Nothing to do
+                  Next;
               end;
             end;
 
@@ -3587,9 +3595,13 @@ begin
         DoStyle(LCh, Doc, '', '', False);
         Next;
       end;
+
+    StyleEndSy:
+      // Nothing to do
+      Next;
   else
     begin
-      Assert(False, 'DoCommon can''t handle <' + SymbToStr(Sy) + GreaterChar);
+      Assert(False, 'DoCommon can''t handle <' + htStringToString(SymbToStr(Sy) + GreaterChar));
       Next; {as loop protection}
     end;
   end;
@@ -4820,19 +4832,23 @@ function THtmlParser.GetEntityStr(CodePage: Integer): ThtString;
   var
     Buf: array[0..10] of ThtChar;
   begin
-    if I = 9 then
-      Result := SpcChar
-    else if I < ord(SpcChar) then {control ThtChar}
-      Result := '?' {is there an error symbol to use here?}
-    else if (I >= 127) and (I <= 159) and not ForceUnicode then
-    begin
-      {127 to 159 not valid Unicode}
-      if MultiByteToWideChar(CodePage, 0, @I, 1, @Buf, SizeOf(Buf)) = 0 then
-        Buf[0] := ThtChar(I);
-      SetString(Result, Buf, 1);
-    end
+    case I of
+      9, 10, 13:
+        Result := SpcChar
     else
-      Result := WideChar(I);
+      if I < ord(SpcChar) then {control ThtChar}
+        Result := '?' {is there an error symbol to use here?}
+      else
+      if (I >= 127) and (I <= 159) and not ForceUnicode then
+      begin
+        {127 to 159 not valid Unicode}
+        if MultiByteToWideChar(CodePage, 0, @I, 1, @Buf, SizeOf(Buf)) = 0 then
+          Buf[0] := ThtChar(I);
+        SetString(Result, Buf, 1);
+      end
+      else
+        Result := WideChar(I);
+    end;
   end;
 
 var
@@ -4971,19 +4987,22 @@ var
     var
       Buf: array[0..10] of ThtChar;
     begin
-      if I = 9 then
-        Result := SpcChar
-      else if I < ord(SpcChar) then {control ThtChar}
-        Result := '?' {is there an error symbol to use here?}
-      else if (I >= 127) and (I <= 159) and not ForceUnicode then
-      begin
-        {127 to 159 not valid Unicode}
-        if MultiByteToWideChar(CodePage, 0, @I, 1, @Buf, SizeOf(Buf)) = 0 then
-          Buf[0] := ThtChar(I);
-        SetString(Result, Buf, 1);
-      end
+      case I of
+        9, 10, 13:
+          Result := SpcChar;
       else
-        Result := WideChar(I);
+        if I < ord(SpcChar) then {control ThtChar}
+          Result := '?' {is there an error symbol to use here?}
+        else if (I >= 127) and (I <= 159) and not ForceUnicode then
+        begin
+          {127 to 159 not valid Unicode}
+          if MultiByteToWideChar(CodePage, 0, @I, 1, @Buf, SizeOf(Buf)) = 0 then
+            Buf[0] := ThtChar(I);
+          SetString(Result, Buf, 1);
+        end
+        else
+          Result := WideChar(I);
+      end;
     end;
 
   var

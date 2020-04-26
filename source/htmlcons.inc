@@ -1,4 +1,29 @@
-{Version 11}
+{
+Version   11.9
+Copyright (c) 1995-2008 by L. David Baldwin
+Copyright (c) 2008-2018 by Bernd Gabriel
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Note that the source modules HTMLGIF1.PAS, DITHERUNIT.PAS
+are covered by separate copyright notices located in those modules.
+}
+
 //{$IFDEF CONDITIONALEXPRESSIONS}
 //
 //
@@ -24,11 +49,13 @@
   {$define ver100_plus}
   {$define ver120_plus}
 
+  {$define TSearchRecHasNoTimestamp}
 {$else}
 
 { Identify Delphi Compiler Version:
 
   #   Compiler          Version Compiler Defined Symbol
+  D26 Delphi 10.3 Rio     33    VER330
   D25 Delphi 10.2 Tokyo   32    VER320
   D24 Delphi 10.1 Berlin  31    VER310
   D23 Delphi 10   Seattle 30    VER300
@@ -95,7 +122,7 @@
                 {$define Compiler20_Plus}
                 {$ifdef ver200}
                 {$else}
-                   {$define Compiler21_Plus}
+                  {$define Compiler21_Plus}
                   {$ifdef ver210}
                   {$else}
                     {$define Compiler22_Plus}
@@ -125,6 +152,18 @@
                                    {$define Compiler30_Plus}
                                    {$ifdef ver300}
                                    {$else}
+                                     {$define Compiler31_Plus}
+                                     {$ifdef ver310}
+                                     {$else}
+                                       {$define Compiler32_Plus}
+                                       {$ifdef ver320}
+                                       {$else}
+                                         {$define Compiler33_Plus}
+                                         {$ifdef ver330}
+                                         {$else}
+                                         {$endif}
+                                       {$endif}
+                                     {$endif}
                                    {$endif}
                                  {$endif}
                                {$endif}
@@ -171,6 +210,8 @@
 
   {$ifdef Compiler22_Plus}
     {$define HasGDIPlus}
+  {$else}
+    {$define TSearchRecHasNoTimestamp}
   {$endif}
 
   {$ifdef Compiler23_Plus}
@@ -228,7 +269,7 @@
 { Define Aspects Of HtmlViewer }
 
 {$ifdef MSWindows}
-{.$define NoGDIPlus} {The gdiplus.dll provides Alpha transparency support for
+{$define NoGDIPlus} {The gdiplus.dll provides Alpha transparency support for
         PNG images and provides support for TIFF images.
         If, for some reason the use of the gdiplus.dll is
         undesirable, define "NoGDIPlus" by removing the '.'.
@@ -318,8 +359,8 @@
 
 {$ifdef Compiler24_Plus}
   {$define HasSystemUITypes}
-{JPM_DEBUGGING define is used for internal debugging using CodeSite Express that is included with
-some versions of RAD Studio XE2.  This should never be used for release software and for component usage.}
+{JPM_DEBUGGING define is used for internal debugging using CodeSite Express that is included with some
+versions of RAD Studio since XE2.  This should never be used for release software and for component usage.}
   {$ifdef win32}
   {.$define JPM_DEBUGGING}
   {$endif}
@@ -329,10 +370,10 @@ some versions of RAD Studio XE2.  This should never be used for release software
 {
 Using Third Party Unicode Controls
 
-Unfortunately, the VCL controls that come with Delphi do not handle Unicode well.
-In fact, in many cases, they do not work well with multibyte fonts either.  For
-this reason, provision had been made to use either the TNT or Elpack third party
-controls.
+Unfortunately, the VCL controls that come with Delphi before 2009 do not handle
+Unicode well.  In fact, in many cases, they do not work well with multibyte fonts
+either.  For this reason, provision had been made to use either the TNT third
+party controls.
 
 The TNT controls may be obtained at
 http://www.yunqa.de/delphi/doku.php/products/tntunicodecontrols/index.

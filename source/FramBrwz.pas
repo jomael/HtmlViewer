@@ -597,19 +597,26 @@ end;
 
 procedure TbrFrame.URLExpandName(Sender: TObject; const SRC: ThtString; var Rslt: ThtString);
 var
-  S: ThtString;
+  S, Base: ThtString;
   Viewer: THtmlViewer;
 begin
   S := ConvDosToHTML(SRC);
   if not IsFullUrl(S) then
   begin
     Viewer := Sender as THtmlViewer;
-    if Pos('//', SRC) = 1 then
-      S := 'http:' + S
-    else if Viewer.Base <> '' then
-      Rslt := CombineURL(ConvDosToHTML(Viewer.Base), S)
+    if Length(Viewer.Base) <> 0 then
+      Base := ConvDosToHTML(Viewer.Base)
     else
-      Rslt := CombineURL(UrlBase, S);
+      Base := UrlBase;
+
+    if Pos('//', S) = 1 then
+    begin
+      //Rslt := 'http:' + S
+      SplitScheme(Base);
+      Rslt := Base + ':' + S;
+    end
+    else
+      Rslt := CombineURL(Base, S);
   end
   else
     Rslt := S;
@@ -925,7 +932,7 @@ begin
     if DocType <> OtherType then
     begin
       Stream := TMemoryStream.Create;
-      TMemoryStream(Stream).LoadFromFile(HTMLToDos(Source));
+      TMemoryStream(Stream).LoadFromFile( htStringToString(HTMLToDos(Source)));
     end;
   end;
 end;
@@ -1085,7 +1092,7 @@ var
             htAppendChr(Result, Ch);
         else
           htAppendChr(Result, '%');
-          htAppendStr(Result, IntToHex(Ord(Ch), 2));
+          htAppendStr(Result, htString(IntToHex(Ord(Ch), 2)));
         end;
       end;
     end;

@@ -1,5 +1,5 @@
 {
-Version   11.8
+Version   11.9
 Copyright (c) 1995-2008 by L. David Baldwin,
 Copyright (c) 2008-2018 by HtmlViewer Team
 
@@ -50,6 +50,11 @@ type
   end;
 
 implementation
+
+{$if lcl_fullversion >= 1080000}
+uses
+  LCLPlatformDef;
+{$ifend}
 
 {$ifdef LCL}
   {$R *.lfm}
@@ -139,6 +144,9 @@ begin
 {$ENDIF}
 {$IFDEF Ver320}
     'Delphi 10.2 Tokyo'
+{$ENDIF}
+{$IFDEF Ver330}
+    'Delphi 10.3 Rio'
 {$ENDIF}
 {$ifdef LCL}
     'Lazarus ' + lcl_version

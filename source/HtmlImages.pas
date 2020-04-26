@@ -1,7 +1,7 @@
 {
-Version   11.7
+Version   11.9
 Copyright (c) 1995-2008 by L. David Baldwin,
-Copyright (c) 2008-2016 by HtmlViewer Team
+Copyright (c) 2008-2018 by HtmlViewer Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -237,7 +237,7 @@ type
   private
     FGraphic: TGraphic;
     FImage: ThtBitmapImage;
-    procedure Construct; deprecated;
+    procedure Construct;
   protected
     function GetBitmap: TBitmap; override;
     function GetGraphic: TGraphic; override;
@@ -486,7 +486,7 @@ function ConvertImage(Bitmap: ThtBitmap): ThtBitmap;
     SelectObject(DC, OldBmp);
     DeleteDC(DC);
     Result := ThtBitmap.Create(Bitmap.WithTransparentMask);
-    Result.Mask := Bitmap.Mask;
+    Result.BitmapMask := Bitmap.BitmapMask;
     Bitmap.Free;
     Result.Handle := Hnd;
     if (ColorBits = 8) and (Result.Palette = 0) then
@@ -814,33 +814,45 @@ var
   Bitmap: ThtBitmap;
 
   procedure LoadPng;
-{$ifdef LCL}
+{$if defined(LCL)}
   var
-    pngImage: TPortableNetworkGraphic;
+    PngImage: TPortableNetworkGraphic;
   begin
-    pngImage := TPortableNetworkGraphic.Create;
+    PngImage := TPortableNetworkGraphic.Create;
     try
-      pngImage.LoadFromStream(Stream);
+      PngImage.LoadFromStream(Stream);
       if ColorBits <= 8 then
-        pngImage.PixelFormat := pf8bit
+        PngImage.PixelFormat := pf8bit
       else
-        pngImage.PixelFormat := pf24bit;
+        PngImage.PixelFormat := pf24bit;
 
-      Bitmap := ThtBitmap.Create(pngImage.MaskHandleAllocated);
-      Bitmap.Assign(pngImage);
-      if pngImage.MaskHandleAllocated then
+      Bitmap := ThtBitmap.Create(PngImage.MaskHandleAllocated);
+      Bitmap.Assign(PngImage);
+      if PngImage.MaskHandleAllocated then
       begin
-        Bitmap.Mask.LoadFromBitmapHandles(pngImage.MaskHandle, 0);
+        Bitmap.BitmapMask.LoadFromBitmapHandles(PngImage.MaskHandle, 0);
         Transparent := itrIntrinsic;
       end
       else
         Transparent := itrNone;
     finally
-      pngImage.Free;
+      PngImage.Free;
+    end;
+{$elseif defined(Compiler20_Plus)}
+  var
+    PngImage: TPngImage;
+  begin
+    PngImage := TPngImage.Create;
+    try
+      PngImage.LoadFromStream(Stream);
+      Result := ThtGraphicImage.Create(PngImage);
+    except
+      PngImage.Free;
+      raise;
     end;
 {$else}
   begin
-{$endif}
+{$ifend}
   end;
 
   procedure LoadJpeg;
@@ -881,7 +893,7 @@ var
         Bitmap.Handle := IconInfo.hbmColor;
         if Transparent <> itrLLCorner then
         begin
-          Bitmap.Mask.Handle := IconInfo.hbmMask;
+          Bitmap.BitmapMask.Handle := IconInfo.hbmMask;
           Transparent := itrIntrinsic;
         end;
       end;
@@ -890,7 +902,7 @@ var
       Bitmap.LoadFromBitmapHandles(Icon.BitmapHandle, 0);
       if Transparent <> itrLLCorner then
       begin
-        Bitmap.Mask.LoadFromBitmapHandles(Icon.MaskHandle, 0);
+        Bitmap.BitmapMask.LoadFromBitmapHandles(Icon.MaskHandle, 0);
         Transparent := itrIntrinsic;
       end;
 {$endif}
@@ -958,14 +970,14 @@ begin
     if Bitmap <> nil then
     begin
       Mask := nil;
-      if Bitmap.Mask = nil then
+      if Bitmap.BitmapMask = nil then
         if Transparent = itrLLCorner then
           Mask := GetImageMask(Bitmap, False, 0);
       Bitmap := ConvertImage(Bitmap);
       if Mask <> nil then
       begin
         Bitmap.WithTransparentMask := True;
-        Bitmap.Mask := Mask;
+        Bitmap.BitmapMask := Mask;
         Mask.Free;
       end;
       Result := ThtBitmapImage.Create(Bitmap, Transparent);
@@ -1991,7 +2003,8 @@ end;
 //-- BG ---------------------------------------------------------- 06.09.2015 --
 procedure ThtImage.PrintUnstretched(Canvas: TCanvas; X, Y, W, H, SrcX, SrcY: Integer; FillBackground: Boolean);
 begin
-  //TODO -oBG, 06.09.2015: print any kind of image unstretched
+  if Graphic <> nil then
+    Canvas.Draw(X, Y, Graphic);
 end;
 
 //-- BG ---------------------------------------------------------- 02.09.2015 --
@@ -2113,7 +2126,7 @@ begin
   inherited Create(Tr);
   Bitmap := AImage;
   OwnsBitmap := AOwnsBitmap;
-  Mask := AImage.Mask;
+  Mask := AImage.BitmapMask;
   OwnsMask := False;
 end;
 
@@ -2313,7 +2326,7 @@ end;
 //-- BG ---------------------------------------------------------- 09.04.2011 --
 function ThtGifImage.GetMask: TBitmap;
 begin
-  Result := Gif.Mask;
+  Result := Gif.BitmapMask;
 end;
 
 //-- BG ---------------------------------------------------------- 02.09.2015 --

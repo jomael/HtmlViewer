@@ -1,6 +1,6 @@
 {
-HtmlViewer Version 11.7
-Copyright (c) 2010-2016 by Bernd Gabriel
+HtmlViewer Version 11.9
+Copyright (c) 2010-2018 by Bernd Gabriel
 
 This source module is based on code of CodeChangerDecode.pas written by SchwarzKopf-M (SchwarzKopf-M@yandex.ru)
 and the source code library libiconv, which is published under the GNU Library General Public License.
@@ -1930,7 +1930,7 @@ active:
   kmax := 2;
   k := 0;
   base64count := 0;
-  i := 0; // valium for the compiler
+  {$IFNDEF Compiler32_Plus}i := 0;{$ENDIF} // valium for the compiler
   while c1 <> 0 do
   begin
     case c1 of

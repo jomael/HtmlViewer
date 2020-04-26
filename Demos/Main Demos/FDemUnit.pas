@@ -1,7 +1,7 @@
 {
-Version   11.7
+Version   11.9
 Copyright (c) 1995-2008 by L. David Baldwin
-Copyright (c) 2008-2016 by HtmlViewer Team
+Copyright (c) 2008-2018 by HtmlViewer Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -36,7 +36,7 @@ uses
   SysUtils, Messages, Classes, Graphics, Controls, Forms, Dialogs,
   ExtCtrls, Menus, Clipbrd, ComCtrls, StdCtrls, Fontdlg,
 {$ifdef LCL}
-  LclIntf, LclType, PrintersDlgs, FPImage, HtmlMisc, WideStringsLcl,
+  LclIntf, LclType, PrintersDlgs, FPImage, HtmlMisc,
 {$else}
   Windows, ShellAPI, MPlayer,
   {$if CompilerVersion >= 15}
@@ -73,6 +73,7 @@ uses
   HtmlGlobals,
   HtmlBuffer,
   URLSubs,
+  StyleUn,
   StyleTypes,
   ReadHTML,
   HTMLSubs,
@@ -147,7 +148,7 @@ type
     procedure About1Click(Sender: TObject);
     procedure BackButtonClick(Sender: TObject);
     procedure CopyItemClick(Sender: TObject);
-    procedure CopyImagetoclipboardClick(Sender: TObject);
+    procedure CopyImagetoClipboardClick(Sender: TObject);
     procedure Edit1Click(Sender: TObject);
     procedure Exit1Click(Sender: TObject);
     procedure File1Click(Sender: TObject);
@@ -191,6 +192,15 @@ type
     procedure SubmitEvent(Sender: TObject; const AnAction, Target, EncType, Method: String; Results: TStringList);
     procedure WindowRequest(Sender: TObject; const Target, URL: String);
 {$else}
+  {$ifdef LCL}
+    procedure FrameViewerInclude(Sender: TObject; const Command: ThtString; Params: ThtStrings; out IncludedDocument: TBuffer);
+    procedure FrameViewerObjectClick(Sender, Obj: TObject; const OnClick: ThtString);
+    procedure HotSpotTargetCovered(Sender: TObject; const Target, URL: ThtString);
+    procedure HotSpotTargetClick(Sender: TObject; const Target, URL: ThtString; var Handled: Boolean);
+    procedure SoundRequest(Sender: TObject; const SRC: ThtString; Loop: Integer; Terminate: Boolean);
+    procedure SubmitEvent(Sender: TObject; const AnAction, Target, EncType, Method: ThtString; Results: ThtStringList);
+    procedure WindowRequest(Sender: TObject; const Target, URL: ThtString);
+  {$else}
     procedure FrameViewerInclude(Sender: TObject; const Command: WideString; Params: TWideStrings; out IncludedDocument: TBuffer);
     procedure FrameViewerObjectClick(Sender, Obj: TObject; const OnClick: WideString);
     procedure HotSpotTargetCovered(Sender: TObject; const Target, URL: WideString);
@@ -198,6 +208,7 @@ type
     procedure SoundRequest(Sender: TObject; const SRC: WideString; Loop: Integer; Terminate: Boolean);
     procedure SubmitEvent(Sender: TObject; const AnAction, Target, EncType, Method: WideString; Results: TWideStringList);
     procedure WindowRequest(Sender: TObject; const Target, URL: WideString);
+  {$endif}
 {$endif}
     procedure mmiQuirksModeDetectClick(Sender: TObject);
     procedure mmiQuirksModeStandardsClick(Sender: TObject);
@@ -538,7 +549,7 @@ begin
   try
     with FontForm do
     begin
-      FontName := FrameViewer.DefFontName;
+      FontName := ReadFontName(FrameViewer.DefFontName);
       FontColor := FrameViewer.DefFontColor;
       FontSize := FrameViewer.DefFontSize;
       HotSpotColor := FrameViewer.DefHotSpotColor;
@@ -643,7 +654,7 @@ begin
   Message.Result := 0;
 end;
 
-procedure TForm1.CopyImagetoclipboardClick(Sender: TObject);
+procedure TForm1.CopyImagetoClipboardClick(Sender: TObject);
 begin
   Clipboard.Assign(FoundObject.Graphic);
 end;

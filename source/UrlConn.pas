@@ -1,6 +1,6 @@
 {
-Version   11.7
-Copyright (c) 2016 by HtmlViewer Team
+Version   11.9
+Copyright (c) 2016-2018 by HtmlViewer Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -304,6 +304,8 @@ type
   ThtResourceConnection = class(ThtConnection)
   protected
     procedure Get(ADoc: ThtUrlDoc); override;
+  public
+    class function CreateResourceStream(Instance: THandle; const ResourceName: ThtString; DocType: ThtDocType): TResourceStream;
   end;
 
   //-- BG -------------------------------------------------------- 18.05.2016 --
@@ -511,7 +513,7 @@ var
 begin
   if (Status = ucsLoaded) and (FStream <> nil) then
   begin
-    FileStream := TFileStream.Create(Filename, fmCreate);
+    FileStream := TFileStream.Create( htStringToString(Filename), fmCreate);
     try
       FileStream.CopyFrom(Stream, 0);
     finally
@@ -800,7 +802,7 @@ begin
 
     Text.Add('<body>');
     Text.Add('<h1>' + ADirName + '</h1>');
-    if (FindFirst( IncludeTrailingPathDelimiter(ADirName) + '*.*', faAnyFile, F) = 0) then
+    if (FindFirst( IncludeTrailingPathDelimiter( htStringToString(ADirName)) + '*.*', faAnyFile, F) = 0) then
     begin
       try
         Text.Add('<table>');
@@ -811,7 +813,7 @@ begin
 
         Text.Add('<tbody>');
         repeat
-{$ifndef TSearchRecHasNoTimestamp}
+{$ifdef TSearchRecHasNoTimestamp}
             TimeStamp := FileDateToDateTime(F.Time);
 {$else}
             TimeStamp := F.TimeStamp;
@@ -823,17 +825,17 @@ begin
             else if F.Name = '..' then
               Name := ExtractFileDir(ADirName)
             else
-              Name := F.Name;
+              Name := htString(F.Name);
             Size := 'DIR';
           end
           else
           begin
-            Name := F.Name;
-            Size := IntToStr(F.Size);
+            Name := htString(F.Name);
+            Size := htString(IntToStr(F.Size));
           end;
           Text.Add(
             '<tr><th class="fn" scope="row"><a href="' + EncodeUrl(DosToHtml(Name))+'">' + Name + '</a></th>' +
-            '<td class="tm">' + DateTimeToStr( TimeStamp ) + '</td><td class="sz">' + Size + '</td></tr>');
+            '<td class="tm">' + htString( DateTimeToStr( TimeStamp )) + '</td><td class="sz">' + Size + '</td></tr>');
         until FindNext(F) <> 0;
         Text.Add('</tbody>');
 
@@ -879,7 +881,7 @@ begin
   end
   else
   begin
-    ADoc.Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+    ADoc.Stream := TFileStream.Create( htStringToString(FileName), fmOpenRead or fmShareDenyWrite);
     Ext := htLowerCase(ExtractFileExt(FileName));
     if Length(Ext) > 0 then
       Delete(Ext, 1, 1);
@@ -925,8 +927,7 @@ end;
 procedure ThtResourceConnection.Get(ADoc: ThtUrlDoc);
 
 var
-   FileName, S, Ext, GoodType: ThtString;
-   HResInfo: HRSRC;
+   FileName, Ext: ThtString;
    I: Integer;
 begin
   FileName := ADoc.Url;
@@ -935,7 +936,7 @@ begin
    submit with a file protocol.  The user can add a response if desired.}
   SplitQuery(FileName);
   { skip protocol: accept both res:// and res:/// }
-  I :=  Pos('res://', LowerCase(FileName));
+  I :=  Pos('res://', htLowerCase(FileName));
   if I > 0 then
   begin
     Delete(FileName, I, 4+2);
@@ -943,21 +944,41 @@ begin
       Delete(FileName, 1, 1);
   end;
 
-  Ext := LowerCase(GetURLExtension(FileName));
+  Ext := htLowerCase(GetURLExtension(FileName));
   ADoc.DocType := FileExt2DocType(Ext);
-  case ADoc.DocType of
+  ADoc.Stream := CreateResourceStream(HInstance, FileName, ADoc.DocType);
+end;
+
+//-- BG ---------------------------------------------------------- 10.03.2019 --
+class function ThtResourceConnection.CreateResourceStream(Instance: THandle; const ResourceName: ThtString; DocType: ThtDocType): TResourceStream;
+var
+  I: Integer;
+  GoodType: ThtString;
+  HResInfo: HRSRC;
+  FileName, Ext, S: ThtString;
+begin
+  Result := nil;
+  FileName := ResourceName;
+
+  case DocType of
     XHTMLType,
-    HTMLType:  GoodType := 'HTML';
-    ImgType:   GoodType := UpperCase(Ext);
-    TextType:  GoodType := 'TEXT';
+    HTMLType:
+      GoodType := 'HTML';
+    ImgType:
+      GoodType := htUpperCase(GetURLExtension(FileName));
+    TextType:
+      GoodType := 'TEXT';
   else
     GoodType := '';
   end;
+
   HResInfo := htFindResource(HInstance, FileName, GoodType);
   if HResInfo = 0 then
-  begin    {try without the extension if can't find it with extension}
+  begin
+    {try without the extension if can't find it with extension}
+    Ext := htLowerCase(GetURLExtension(FileName));
     I := Pos('.' + Ext, htLowerCase(FileName));
-    if I >= 0 then
+    if I > 0 then
     begin
       S := FileName;
       SetLength(S, I - 1);
@@ -966,11 +987,9 @@ begin
         FileName := S;
     end;
   end;
-  if HResInfo = 0 then
-    // avoid Exception. ADoc.Stream = nil is okay. Next access to it will create an empty TMemoryStream.
-    // raise EResNotFound.Create('Can''t find resource: '+FileName);
-  else
-    ADoc.Stream := TResourceStream.Create(HInstance, FileName, PChar({$ifdef LCL}string(GoodType){$else}GoodType{$endif}));
+
+  if HResInfo <> 0 then
+    Result := TResourceStream.Create(Instance, htStringToString(FileName), PChar({$ifdef LCL}string(GoodType){$else}GoodType{$endif}));
 end;
 
 { ThtResourceConnector }
@@ -1062,7 +1081,7 @@ begin
     Thread := FWaiting[Index];
     Thread.Terminate;
     if Thread.Suspended then
-      Thread.Resume;
+      Thread.Suspended := False;
   end;
 
   for Index := FRunning.Count - 1 downto 0 do
@@ -1070,7 +1089,7 @@ begin
     Thread := FRunning[Index];
     Thread.Terminate;
     if Thread.Suspended then
-      Thread.Resume;
+      Thread.Suspended := False
   end;
 
   while (FWaiting.Count > 0) or (FRunning.Count > 0) do
@@ -1143,7 +1162,7 @@ begin
     Thread := FWaiting[0];
     FWaiting.Delete(0);
     FRunning.Add(Thread);
-    Thread.Resume;
+    Thread.Suspended := False
   end;
 end;
 

@@ -1,7 +1,7 @@
 {
-Version   11.8
+Version   11.9
 Copyright (c) 1995-2008 by L. David Baldwin
-Copyright (c) 2008-2017 by HtmlViewer Team
+Copyright (c) 2008-2018 by HtmlViewer Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -87,6 +87,7 @@ uses
   HtmlBuffer,
   HtmlSymb,
   StyleUn,
+  UrlSubs,
   HTMLGif2;
 
 type
@@ -931,8 +932,6 @@ type
 
   TFormControlObj = class(TFloatingObj)
   private
-    //FYValue: Integer;
-    //FAttributeList: ThtStringList;
     FName: ThtString;
     FID: ThtString;
     FTitle: ThtString;
@@ -1036,28 +1035,34 @@ type
   TFormRadioButton = class(ThtRadioButton)
   private
     IDName: ThtString;
-    FChecked: Boolean;
     procedure WMGetDlgCode(var Message: TMessage); message WM_GETDLGCODE;
-  protected
-    function GetChecked: Boolean; override;
-    procedure CreateWnd; override;
-    procedure SetChecked(Value: Boolean); override;
-  published
-    property Checked: Boolean read GetChecked write SetChecked;
+  end;
+
+  // To isolate radio buttons from each other. THtmlForm.DoRadios() unchecks grouped buttons.
+  TFormRadioPanel = class(TWinControl)
   end;
 
   TRadioButtonFormControlObj = class(TFormControlObj)
   private
+    FPanel: TFormRadioPanel;
     FControl: TFormRadioButton;
     WasChecked: Boolean;
     function GetChecked: Boolean;
     procedure SetChecked(Value: Boolean);
   protected
+    function GetClientLeft: Integer; override;
+    function GetClientTop: Integer; override;
     function GetColor: TColor; //override;
     function GetControl: TWinControl; override;
     procedure DoOnChange; override;
     procedure SaveContents; override;
+    procedure SetClientHeight(Value: Integer); override;
+    procedure SetClientLeft(Value: Integer); override;
+    procedure SetClientTop(Value: Integer); override;
+    procedure SetClientWidth(Value: Integer); override;
     procedure SetColor(const Value: TColor); //override;
+    procedure SetTabOrder(Value: Integer); override;
+    procedure SetTabStop(Value: Boolean); override;
   public
     IsChecked: Boolean;
     //xMyCell: TCellBasic;
@@ -1078,6 +1083,8 @@ type
 //------------------------------------------------------------------------------
 // some blocks
 //------------------------------------------------------------------------------
+
+  { THRBlock }
 
   THRBlock = class(TBlock)
   public
@@ -1780,7 +1787,7 @@ begin
 end;
 
 //-- BG ---------------------------------------------------------- 17.01.2012 --
-function SubArray(const Arr, Minus: TIntArray): TIntArray; overload;
+function SubArray(const Arr, Minus: TIntArray): TIntArray;
  {$ifdef UseInline} inline; {$endif}
 // Return array with differences per index.
 var
@@ -1882,8 +1889,9 @@ end;
 procedure THtmlNode.AfterConstruction;
 begin
   inherited AfterConstruction;
-  if (Length(ID) > 0) and (Document <> nil) and (Document.IDNameList <> nil) then
-    Document.IDNameList.AddObject(ID, Self);
+
+  if (Length(Id) > 0) and (Document <> nil) and (Document.IDNameList <> nil) then
+    Document.IDNameList.AddObject(Id, Self);
 end;
 
 //-- BG ---------------------------------------------------------- 07.09.2013 --
@@ -1978,7 +1986,17 @@ end;
 
 //-- BG ---------------------------------------------------------- 21.10.2016 --
 destructor THtmlNode.Destroy;
+var
+  Idx: Integer;
 begin
+  if (Length(Id) > 0) and (Document <> nil) and (Document.IDNameList <> nil) then
+    with Document.IdNameList do
+    begin
+      Idx := IndexOfObject(Self);
+      if Idx >= 0 then
+         Delete(Idx);
+    end;
+
   if not IsCopy then
   begin
     FAttributes.Free;
@@ -3451,6 +3469,7 @@ begin
   if Radio.FName <> '' then
   begin
     S := Radio.FName;
+
     for I := 0 to ControlList.Count - 1 do
     begin
       Ctrl := ControlList[I];
@@ -3968,10 +3987,10 @@ begin
     if FName <> '' then
       S := FName + '.';
     if Index = 0 then
-      S := S + 'x=' + IntToStr(XPos)
+      S := S + 'x=' + htString(IntToStr(XPos))
     else
     begin {index = 1}
-      S := S + 'y=' + IntToStr(YPos);
+      S := S + 'y=' + htString(IntToStr(YPos));
       XPos := -1;
     end;
   end;
@@ -3982,7 +4001,7 @@ end;
 constructor TRadioButtonFormControlObj.Create(Parent: TCellBasic; Position: Integer; L: TAttributeList; Prop: TProperties);
 var
   T: TAttribute;
-  PntPanel: TWinControl; //TPaintPanel;
+  PntPanel: TWinControl; // TPaintPanel;
   Ctrl: TFormControlObj;
   RadioButtonFormControlObj: TRadioButtonFormControlObj absolute Ctrl;
   I: Integer;
@@ -3993,6 +4012,8 @@ begin
   inherited Create(Parent,Position,L,Prop);
   //xMyCell := ACell;
   PntPanel := Document.PPanel;
+  FPanel := TFormRadioPanel.Create(PntPanel);
+  FPanel.Parent := PntPanel;
   FControl := TFormRadioButton.Create(PntPanel);
   VertAlign := ABaseline;
   T := nil;
@@ -4000,24 +4021,26 @@ begin
     IsChecked := True;
   with FControl do
   begin
-    Left := -4000; {so will be invisible until placed}
+    FPanel.Left := -4000; {so will be invisible until placed}
+    FControl.Left := 0;
     if Screen.PixelsPerInch > 100 then
     begin
-      Width := 16;
-      Height := 16;
+      FPanel.Width := 16;
+      FPanel.Height := 16;
     end
     else
     begin
-      Width := 13;
-      Height := 14;
+      FPanel.Width := 13;
+      FPanel.Height := 14;
     end;
+    FControl.Align := alClient;
     IDName := Self.FName;
     OnEnter := EnterEvent;
     OnExit := ExitEvent;
     OnKeyDown := MyForm.AKeyDown;
     OnMouseMove := HandleMouseMove;
     Enabled := not Disabled;
-    Parent := PntPanel; {must precede Checked assignment}
+    Parent := FPanel; {must precede Checked assignment}
 
   {The Tabstop for the first radiobutton in a group will be set in case no
    radiobuttons that follow are checked.  This insures that the tab key can
@@ -4028,7 +4051,7 @@ begin
     begin
       Ctrl := TFormControlObj(MyForm.ControlList.Items[I]);
       if (Ctrl is TRadioButtonFormControlObj) and (RadioButtonFormControlObj.FControl <> FControl) then {skip the current radiobutton}
-        if htCompareText(Ctrl.Name, Name) = 0 then {same group}
+        if htCompareText(Ctrl.Name, htString(Name)) = 0 then {same group}
           if not IsChecked then
           begin
           {if the current radiobutton is not checked and there are other radio buttons,
@@ -4155,9 +4178,21 @@ begin
 end;
 
 //-- BG ---------------------------------------------------------- 15.01.2011 --
-function TRadioButtonFormControlObj.getChecked: Boolean;
+function TRadioButtonFormControlObj.GetChecked: Boolean;
 begin
   Result := FControl.Checked;
+end;
+
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+function TRadioButtonFormControlObj.GetClientLeft: Integer;
+begin
+  Result := FPanel.Left;
+end;
+
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+function TRadioButtonFormControlObj.GetClientTop: Integer;
+begin
+  Result := FPanel.Top;
 end;
 
 function TRadioButtonFormControlObj.GetSubmission(Index: Integer; out S: ThtString): Boolean;
@@ -4185,10 +4220,52 @@ begin
   FControl.Checked := Value;
 end;
 
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+procedure TRadioButtonFormControlObj.SetClientHeight(Value: Integer);
+begin
+  inherited;
+  FPanel.Height := Value;
+end;
+
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+procedure TRadioButtonFormControlObj.SetClientLeft(Value: Integer);
+begin
+  FPanel.Left := Value;
+  FControl.Left := 0;
+end;
+
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+procedure TRadioButtonFormControlObj.SetClientTop(Value: Integer);
+begin
+  FPanel.Top := Value;
+  FControl.Top := 0;
+end;
+
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+procedure TRadioButtonFormControlObj.SetClientWidth(Value: Integer);
+begin
+  inherited;
+  FPanel.Width := Value;
+end;
+
 //-- BG ---------------------------------------------------------- 16.01.2011 --
 procedure TRadioButtonFormControlObj.SetColor(const Value: TColor);
 begin
+  FPanel.Color := Value;
   FControl.Color := Value;
+end;
+
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+procedure TRadioButtonFormControlObj.SetTabOrder(Value: Integer);
+begin
+  FPanel.TabOrder := Value;
+end;
+
+//-- BG ---------------------------------------------------------- 29.04.2019 --
+procedure TRadioButtonFormControlObj.SetTabStop(Value: Boolean);
+begin
+  inherited;
+  FPanel.TabStop := Value;
 end;
 
 //-- BG ---------------------------------------------------------- 30.08.2013 --
@@ -7666,7 +7743,7 @@ begin
   Styles.Initialize(Name, PreName, ASize, AColor, AHotspot, AVisitedColor,
     AActiveColor, LinkUnderLine, ACodePage, ACharSet, MarginHeight, MarginWidth);
   InitializeFontSizes(ASize);
-  PreFontName := PreName;
+  PreFontName := htStringToString(PreName);
   HotSpotColor := AHotSpot;
   LinkVisitedColor := AVisitedColor;
   LinkActiveColor := AActiveColor;
@@ -7862,8 +7939,8 @@ function ThtDocument.GetTheImage(const BMName: ThtString; var Transparent: ThtIm
       // BTW: Internet Explorer 9 shows but does not save inline images at all.
       // Using StringReplace() here is a quick and dirty hack.
       // Better decode %encoded attribute values while reading the attributes.
-      Name := StringReplace(Name, '%0A', #$0A, [rfReplaceAll]);
-      Source := TStringStream.Create(Copy(Name, I + 8, MaxInt));
+      Name := htString(StringReplace(htStringToString(Name), '%0A', #$0A, [rfReplaceAll]));
+      Source := TStringStream.Create(Copy(htStringToString(Name), I + 8, MaxInt));
       try
         Stream := TMemoryStream.Create;
         try
@@ -7885,17 +7962,26 @@ function ThtDocument.GetTheImage(const BMName: ThtString; var Transparent: ThtIm
   procedure GetTheFile(Name: ThtString);
   var
     Stream: TStream;
+    Scheme, Specific, ResType: ThtString;
   begin
     Name := TheOwner.HtmlExpandFilename(Name);
-    if FileExists(Name) then
+    SplitScheme(Name, Scheme, Specific);
+    if Scheme = 'res' then
     begin
-      Stream := TFileStream.Create(Name, fmOpenRead or fmShareDenyWrite);
+      Specific := HTMLToRes(Name, ResType);
+      Stream := TResourceStream.Create(HInstance, htStringToString(Specific), PChar({$ifdef LCL}string(ResType){$else}ResType{$endif}) );
+    end
+    else if FileExists(Name) then
+      Stream := TFileStream.Create( htStringToString(Name), fmOpenRead or fmShareDenyWrite)
+    else
+      Stream := nil;
+
+    if Stream <> nil then
       try
         Result := LoadImageFromStream(Stream, Transparent);
       finally
         Stream.Free;
       end;
-    end;
   end;
 
 var
@@ -13064,7 +13150,7 @@ var
     NewCP := True;
     CPy := Y + LR.DrawY;  //Todo: Someone needs to find a sensible default value.
     CPx := X + LR.LineIndent;
-    CP1x := CPx;
+    {$IFNDEF Compiler32_Plus}CP1x := CPx;{$ENDIF}
     LR.DrawY := Y - LR.LineHt;
     LR.DrawXX := CPx;
     AdjustDrawRect( LR.DrawY, LR.DrawXX, LR.DrawWidth, LR.LineHt ); //>-- DZ 19.09.2012
@@ -13449,6 +13535,7 @@ var
             ARect := Rect(CPx, Tmp - FO.FontHeight, CP1x + 1, Tmp);
             if FO.Active then
             begin
+              Canvas.Brush.Color := clWhite;
               Canvas.Font.Color := clBlack; {black font needed for DrawFocusRect}
               Canvas.Handle; {Dummy call needed to make Delphi add font color change to handle}
               if Document.TheOwner.ShowFocusRect then //MK20091107
@@ -13685,7 +13772,7 @@ begin
         UrlTarg := MakeCopy(FO.UrlTarget);
         Document.ActiveLink := FO;
         if IMap then
-          UrlTarg.Url := UrlTarg.Url + '?' + IntToStr(IX) + ',' + IntToStr(IY);
+          UrlTarg.Url := UrlTarg.Url + htString('?' + IntToStr(IX) + ',' + IntToStr(IY));
       end;
     end;
   end
@@ -14084,7 +14171,7 @@ begin
           begin
             AName := Name;
             try
-              Panel.Name := Name;
+              Panel.Name := htStringToString(Name);
             except {duplicate name will be ignored}
             end;
           end;
@@ -14679,28 +14766,30 @@ end;
 
 {----------------TFormRadioButton.GetChecked:}
 
-function TFormRadioButton.GetChecked: Boolean;
-begin
-  Result := FChecked;
-end;
+//function TFormRadioButton.GetChecked: Boolean;
+//begin
+//  Result := FChecked;
+//end;
 
-procedure TFormRadioButton.CreateWnd;
-begin
-  inherited CreateWnd;
-  inherited SetChecked(FChecked);
-end;
+//procedure TFormRadioButton.CreateWnd;
+//begin
+//  inherited CreateWnd;
+//  inherited SetChecked(FInitiallyChecked);
+//end;
 
-procedure TFormRadioButton.SetChecked(Value: Boolean);
-begin
-  if GetKeyState(VK_TAB) < 0 then {ignore if tab key down}
-    Exit;
-  if FChecked <> Value then
-  begin
-    FChecked := Value;
-    TabStop := Value;
-    inherited SetChecked(FChecked);
-  end;
-end;
+//procedure TFormRadioButton.SetChecked(Value: Boolean);
+//var
+//  RadioGroup: TWinControl; // radio group panel
+//begin
+//  if GetKeyState(VK_TAB) < 0 then {ignore if tab key down}
+//    Exit;
+//  if FChecked <> Value then
+//  begin
+//    FChecked := Value;
+//    TabStop := Value;
+//    inherited SetChecked(FChecked);
+//  end;
+//end;
 
 procedure TFormRadioButton.WMGetDlgCode(var Message: TMessage);
 begin
@@ -14937,11 +15026,12 @@ begin
   Result := inherited Draw1(Canvas, ARect, IMgr, X, XRef, YRef);
   YO := Y - Document.YOff;
   if (YO + SectionHeight >= ARect.Top) and (YO < ARect.Bottom) and (not Document.Printing or (Y < Document.PageBottom)) then
+  begin
+    Inc(X, Indent);
+    YT := YO;
+    XR := X + Width - 1;
     with Canvas do
     begin
-      Inc(X, Indent);
-      YT := YO;
-      XR := X + Width - 1;
       if Color <> clNone then
       begin
         Brush.Color := ThemedColor(Color {$ifdef has_StyleElements},seClient in Document.StyleElements{$endif}) or $2000000;
@@ -14975,6 +15065,7 @@ begin
       end;
       Document.FirstPageItem := False; {items after this will not be first on page}
     end;
+  end;
 end;
 
 { THtmlPropStack }
@@ -15239,8 +15330,8 @@ begin
     with Items[I] do
       if not ShowIt and (TheControl <> nil) then
       begin
-        TheControl.Show; {makes it tab active}
-        TheControl.Left := -4000; {even if it can't be seen}
+        Show; {makes it tab active}
+        Left := -4000; {even if it can't be seen}
       end;
 end;
 
@@ -15252,7 +15343,7 @@ begin
   for I := 0 to Count - 1 do
     with Items[I] do
       if not ShowIt and (TheControl <> nil) then
-        TheControl.Hide; {hides and turns off tabs}
+        Hide; {hides and turns off tabs}
 end;
 
 //-- BG ---------------------------------------------------------- 15.01.2011 --

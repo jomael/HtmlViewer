@@ -1947,7 +1947,7 @@ begin
   IntfImage := TLazIntfImage.Create(0,0,[]);
   try
     MskHandle := CreateBitmap(Bitmap.Width, Bitmap.Height, 1, 1, nil);
-    IntfImage.LoadFromBitmap(Bitmap.Mask.BitmapHandle, MskHandle);
+    IntfImage.LoadFromBitmap(Bitmap.BitmapMask.BitmapHandle, MskHandle);
     DeleteObject(MskHandle);
 
     stopx := IntfImage.Width - 1;
@@ -1964,7 +1964,7 @@ begin
 
     IntfImage.CreateBitmaps(ImgHandle, MskHandle);
     DeleteObject(ImgHandle);
-    Bitmap.Mask.BitmapHandle := MskHandle;
+    Bitmap.BitmapMask.BitmapHandle := MskHandle;
   finally
     IntfImage.Free;
     //Bitmap.Free;
@@ -2150,12 +2150,12 @@ begin
     if IsTransparent then
     begin
       Result.HandleType := bmDIB;
-      Result.Mask.LoadFromStream(MStream);
+      Result.BitmapMask.LoadFromStream(MStream);
 {$ifdef LCL}
       // setting to monochrome not yet implemented
       CreateMask(Result, clWhite);
 {$else}
-      Result.Mask.Monochrome := True; {crunch mask into a monochrome TBitmap}
+      Result.BitmapMask.Monochrome := True; {crunch mask into a monochrome TBitmap}
 {$endif}
     end;
     Stream.Free;
